@@ -30,4 +30,4 @@ jobs:
               uses: docker/build-push-action@v5
               with:
                   push: true
-                  tags: Nem-Tudo/betterbluesky_api:latest
+                  tags: nem-tudo/betterbluesky_api:latest
