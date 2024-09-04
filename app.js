@@ -64,7 +64,22 @@ const SettingsSchema = mongoose.model("Setting", new mongoose.Schema({
             type: Array,
             default: []
         }
-    }
+    },
+    pinWord: {
+        enabled: {
+            type: Boolean,
+            default: false
+        },
+        word: {
+            type: String,
+        },
+        count: {
+            type: Number
+        },
+        position: {
+            type: Number
+        },
+    },
 }))
 
 const cache = {
@@ -80,6 +95,12 @@ const cache = {
             trends: [],
             words: [],
             users: []
+        },
+        pinWord: {
+            enabled: false,
+            word: "",
+            count: 0,
+            position: 0,
         }
     }
 }
@@ -123,6 +144,7 @@ updateCacheSettings()
 async function updateCacheSettings() {
     const settings = (await SettingsSchema.findOne({})) || await SettingsSchema.create({})
     cache.settings.blacklist = settings.blacklist;
+    cache.settings.pinWord = settings.pinWord;
 }
 
 updateCacheTrending()
@@ -145,6 +167,11 @@ async function getTrending(limit) {
     const hashtags = await getTrendingType(limit, "h");
 
     const trends = mergeArray(hashtags, words)
+
+    if (cache.settings.pinWord.enabled) {
+        trends.splice(cache.settings.pinWord.position, 0, { text: cache.settings.pinWord.word, count: cache.settings.pinWord.count });
+        console.log(`PINNED WORD: [${cache.settings.pinWord.position}] ${cache.settings.pinWord.word} (${cache.settings.pinWord.count})`)
+    }
 
     return removeDuplicatedTrends(trends).slice(0, limit)
 }
@@ -263,5 +290,5 @@ app.listen(process.env.PORT, () => {
     console.log(`Aplicativo iniciado em ${process.env.PORT}`)
     updateCacheTrending()
     updateCacheSettings()
-    deleteOlds(3)
+    // deleteOlds(3)
 })
