@@ -34,6 +34,22 @@ const WordSchema = mongoose.model("Word", new mongoose.Schema({
     }
 }));
 
+// const StatsSchema = mongoose.model("Stats", new mongoose.Schema({
+//     action: {
+//         type: String,
+//         required: true,
+//     },
+//     data: {
+//         type: String,
+//         required: true
+//     },
+//     createdAt: { //created at
+//         type: Date,
+//         immutable: true,
+//         default: () => new Date()
+//     }
+// }));
+
 const SettingsSchema = mongoose.model("Setting", new mongoose.Schema({
     blacklist: {
         trends: {
@@ -111,13 +127,12 @@ async function updateCacheSettings() {
 
 updateCacheTrending()
 async function updateCacheTrending() {
-    cache.trending.data = await getTrending(12)
+    cache.trending.data = await getTrending(15)
     cache.trending.head.time = Date.now()
     cache.trending.head.length = cache.trending.data.length
     console.log(`=============================== Cache atualizado (${Date.now()}) ===============================`)
     console.log(cache.trending)
 }
-
 
 setInterval(async () => {
     await updateCacheTrending()
@@ -201,14 +216,14 @@ setInterval(() => {
     deleteOlds(3)
 }, 1000 * 60 * 60 * 1)
 
-async function deleteOlds(hours) {
+async function deleteOlds(hours) { //apaga as words antes de x horas
     const hoursAgo = new Date(Date.now() - hours * 60 * 60 * 1000); // Data e hora de x horas atrás
 
-    await Word.deleteMany({
-        ca: { $lt: hoursAgo } // Remove documentos criados há mais de 2 horas
-    });
+    const result = await WordSchema.deleteMany({ "ca": { $lt: hoursAgo } });
 
-    console.log(`Removed before ${hours}h`);
+    console.log("-----------------------------------------------------------------------");
+    console.log(`Removed before ${hours}h: ${result.deletedCount}`);
+    console.log("-----------------------------------------------------------------------");
 }
 
 function getHashtags(texto) {
@@ -222,6 +237,31 @@ app.get("/api/trends", (req, res) => {
     res.json(cache.trending)
 })
 
+// app.post("/api/stats", async (req, res) => {
+//     const event = req.query.event;
+
+//     if (!event) return res.status(400).json({ message: "event is required" })
+//     if (typeof event != "string") return res.status(400).json({ message: "event must be an string" })
+
+//     if (!["trends.click"].includes(event)) return res.status(400).json({ message: "invalid event" })
+
+
+//     const data = req.query.data;
+
+//     if (!data) return res.status(400).json({ message: "data is required" })
+//     if (typeof data != "string") return res.status(400).json({ message: "data must be an string" })
+
+//     StatsSchema.create({
+//         event: event,
+//         data: data
+//     })
+
+//     return res.json({ ok: true })
+// })
+
 app.listen(process.env.PORT, () => {
     console.log(`Aplicativo iniciado em ${process.env.PORT}`)
+    updateCacheTrending()
+    updateCacheSettings()
+    deleteOlds(3)
 })
