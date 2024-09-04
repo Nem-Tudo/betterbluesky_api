@@ -254,7 +254,7 @@ setInterval(() => {
 }, 1000 * 30)
 
 setInterval(() => {
-    console.log(`Últimos 60s: ${cache.stats.last30sRequestTrends}`);
+    console.log(`Últimos 60s: ${cache.stats.last60sRequestTrends}`);
     cache.stats.last60sRequestTrends = 0;
 }, 1000 * 60)
 
