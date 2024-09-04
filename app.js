@@ -218,7 +218,7 @@ function getHashtags(texto) {
 
 
 app.get("/api/trends", (req, res) => {
-    console.log(`[${Date.now()}] GET - /trends`)
+    console.log(`[${Date.now()}] GET - /trends (${req.query.updateCount})`)
     res.json(cache.trending)
 })
 
