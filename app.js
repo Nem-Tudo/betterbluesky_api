@@ -3,8 +3,6 @@ require("dotenv").config()
 const { ComAtprotoSyncSubscribeRepos, SubscribeReposMessage, subscribeRepos } = require("atproto-firehose");
 const mongoose = require("mongoose");
 
-const config = require("./config.js")
-
 mongoose.connect(process.env.MONGODB);
 
 const express = require("express");
@@ -17,48 +15,41 @@ app.use(cors({
 }))
 
 const WordSchema = mongoose.model("Word", new mongoose.Schema({
-    t: {
+    t: { //texto
         type: String,
         required: true,
     },
-    ca: {
+    ty: { //tipo (w = word, h = hashtag)
+        type: String,
+        required: true
+    },
+    l: { //languages
+        type: String,
+        required: true
+    },
+    ca: { //created at
         type: Date,
         immutable: true,
         default: () => new Date()
     }
 }));
 
-const client = subscribeRepos(`wss://bsky.network`, { decodeRepoOps: true });
-
-client.on('message', message => {
-    if (ComAtprotoSyncSubscribeRepos.isCommit(message)) {
-        message.ops.forEach(async (op) => {
-            if (!op?.payload) return
-            if (op.payload["$type"] != "app.bsky.feed.post") return;
-
-            const text = op.payload.text.trim();
-
-            const posthashtags = getHashtags(text);
-
-            for (const hashtag of posthashtags) {
-                if (hashtag.length > 2) {
-                    if (config.blacklist.trends.includes(hashtag)) return;
-                    if (config.blacklist.words.find(word => hashtag.includes(word))) return;
-                    await WordSchema.create({ t: hashtag })
-                }
-
-            }
-        })
+const SettingsSchema = mongoose.model("Setting", new mongoose.Schema({
+    blacklist: {
+        trends: {
+            type: Array,
+            default: []
+        },
+        words: {
+            type: Array,
+            default: []
+        },
+        users: {
+            type: Array,
+            default: []
+        }
     }
-})
-
-// setInterval(async () => {
-
-//     const result = await getTrendingHashtags(10);
-
-//     console.log("=======================================")
-//     console.log(result)
-// }, 200)
+}))
 
 const cache = {
     trending: {
@@ -67,28 +58,88 @@ const cache = {
             length: 0,
         },
         data: []
+    },
+    settings: {
+        blacklist: {
+            trends: [],
+            words: [],
+            users: []
+        }
     }
 }
+
+
+const client = subscribeRepos(`wss://bsky.network`, { decodeRepoOps: true });
+
+client.on('message', message => {
+    if (ComAtprotoSyncSubscribeRepos.isCommit(message)) {
+        message.ops.forEach(async (op) => {
+            if (!op?.payload) return
+            if (op.payload["$type"] != "app.bsky.feed.post") return;
+            if (!op.payload.langs?.includes("pt")) return; //apenas em portugues
+
+            const text = op.payload.text.trim();
+
+            const posthashtags = getHashtags(text);
+            const postwords = text.trim().split(" ").filter(word => (word.length > 2) && (word.length < 64) && !word.startsWith("#"))
+
+            for (const hashtag of posthashtags) {
+                if (hashtag.length > 2) {
+                    if (cache.settings.blacklist.trends.map(t => t.toLowerCase()).includes(hashtag.toLowerCase())) return;
+                    if (cache.settings.blacklist.words.find(w => hashtag.toLowerCase().includes(w.toLowerCase()))) return;
+                    await WordSchema.create({ t: hashtag, ty: "h", l: op.payload.langs.join(" ") })
+                }
+
+            }
+
+            for (const word of postwords) {
+                if (cache.settings.blacklist.trends.map(t => t.toLowerCase()).includes(word.toLowerCase())) return;
+                if (cache.settings.blacklist.words.find(w => word.toLowerCase().includes(w.toLowerCase()))) return;
+                await WordSchema.create({ t: word.toLowerCase(), ty: "w", l: op.payload.langs.join(" ") })
+
+            }
+        })
+    }
+})
+
+
+updateCacheSettings()
+async function updateCacheSettings() {
+    const settings = (await SettingsSchema.findOne({})) || await SettingsSchema.create({})
+    cache.settings.blacklist = settings.blacklist;
+}
+
 updateCacheTrending()
 async function updateCacheTrending() {
-    cache.trending.data = await getTrendingHashtags(5)
+    cache.trending.data = await getTrending(12)
     cache.trending.head.time = Date.now()
     cache.trending.head.length = cache.trending.data.length
     console.log(`=============================== Cache atualizado (${Date.now()}) ===============================`)
     console.log(cache.trending)
 }
 
+
 setInterval(async () => {
     await updateCacheTrending()
+    await updateCacheSettings()
 }, 30 * 1000)
 
-async function getTrendingHashtags(limit) {
+
+async function getTrending(limit) {
+    const words = await getTrendingType(limit, "w");
+    const hashtags = await getTrendingType(limit, "h");
+
+    return mergeArray(hashtags, words).slice(0, limit)
+}
+
+async function getTrendingType(limit, type) {
     const hoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000); // Data e hora de 2 horas atrás
 
     const result = await WordSchema.aggregate([
         {
             $match: {
-                ca: { $gte: hoursAgo } // Filtra documentos criados nos últimos 2 horas
+                ca: { $gte: hoursAgo }, // Filtra documentos criados nos últimos 2 horas
+                ty: type,
             }
         },
         {
@@ -105,7 +156,24 @@ async function getTrendingHashtags(limit) {
         }
     ]);
 
-    return result.filter(obj => (!config.blacklist.trends.map(t => t.toLowerCase()).includes(obj._id.toLowerCase())) && (!config.blacklist.words.find(word => obj._id.toLowerCase().includes(word.toLowerCase())))).map(obj => { return { text: obj._id, count: obj.count } }).slice(0, limit);
+    return result.filter(obj => (!cache.settings.blacklist.trends.map(t => t.toLowerCase()).includes(obj._id.toLowerCase())) && (!cache.settings.blacklist.words.find(word => obj._id.toLowerCase().includes(word.toLowerCase())))).map(obj => { return { text: obj._id, count: obj.count } }).slice(0, limit);
+}
+
+
+function mergeArray(arrayA, arrayB) {
+    const result = [];
+    const maxLength = Math.max(arrayA.length, arrayB.length);
+
+    for (let i = 0; i < maxLength; i++) {
+        if (i < arrayA.length) {
+            result.push(arrayA[i]);
+        }
+        if (i < arrayB.length) {
+            result.push(arrayB[i]);
+        }
+    }
+
+    return result;
 }
 
 setInterval(() => {
@@ -132,7 +200,6 @@ app.get("/trends", (req, res) => {
     console.log(`[${Date.now()}] GET - /trends`)
     res.json(cache.trending)
 })
-
 
 app.listen(process.env.PORT, () => {
     console.log(`Aplicativo iniciado em ${process.env.PORT}`)
