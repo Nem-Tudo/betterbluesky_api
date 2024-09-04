@@ -129,7 +129,9 @@ async function getTrending(limit) {
     const words = await getTrendingType(limit, "w");
     const hashtags = await getTrendingType(limit, "h");
 
-    return mergeArray(hashtags, words).slice(0, limit)
+    const trends = mergeArray(hashtags, words)
+
+    return removeDuplicatedTrends(trends).slice(0, limit)
 }
 
 async function getTrendingType(limit, type) {
@@ -157,6 +159,25 @@ async function getTrendingType(limit, type) {
     ]);
 
     return result.filter(obj => (!cache.settings.blacklist.trends.map(t => t.toLowerCase()).includes(obj._id.toLowerCase())) && (!cache.settings.blacklist.words.find(word => obj._id.toLowerCase().includes(word.toLowerCase())))).map(obj => { return { text: obj._id, count: obj.count } }).slice(0, limit);
+}
+
+function removeDuplicatedTrends(trends) {
+    const wordMap = new Map();
+
+    trends.forEach(({ text, count }) => {
+        const lowerCaseText = text.toLowerCase();
+
+        if (wordMap.has(lowerCaseText)) {
+            wordMap.set(lowerCaseText, {
+                text: wordMap.get(lowerCaseText).text,
+                count: wordMap.get(lowerCaseText).count + count
+            });
+        } else {
+            wordMap.set(lowerCaseText, { text, count });
+        }
+    });
+
+    return Array.from(wordMap.values());
 }
 
 
