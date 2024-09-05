@@ -34,21 +34,25 @@ const WordSchema = mongoose.model("Word", new mongoose.Schema({
     }
 }));
 
-// const StatsSchema = mongoose.model("Stats", new mongoose.Schema({
-//     action: {
-//         type: String,
-//         required: true,
-//     },
-//     data: {
-//         type: String,
-//         required: true
-//     },
-//     createdAt: { //created at
-//         type: Date,
-//         immutable: true,
-//         default: () => new Date()
-//     }
-// }));
+const StatsSchema = mongoose.model("Stats", new mongoose.Schema({
+    event: {
+        type: String,
+        required: true,
+    },
+    data: {
+        type: String,
+        required: true
+    },
+    sessionID: {
+        type: String,
+        required: true
+    },
+    createdAt: { //created at
+        type: Date,
+        immutable: true,
+        default: () => new Date()
+    }
+}));
 
 const SettingsSchema = mongoose.model("Setting", new mongoose.Schema({
     blacklist: {
@@ -179,7 +183,7 @@ async function getTrending(hourlimit, recentlimit) {
     const hourtrends = removeDuplicatedTrends(_hourtrends).slice(0, hourlimit)
     const recenttrends = removeDuplicatedTrends(_recenttrends).filter(rt => !hourtrends.find(t => t.text.toLowerCase() === rt.text.toLowerCase())).slice(0, recentlimit)
 
-    const trends = removeDuplicatedTrends([ ...hourtrends, ...recenttrends]);
+    const trends = removeDuplicatedTrends([...hourtrends, ...recenttrends]);
 
 
     if (cache.settings.pinWord.enabled) {
@@ -292,27 +296,41 @@ app.get("/api/trends", (req, res) => {
     cache.stats.last60sRequestTrends++;
 })
 
-// app.post("/api/stats", async (req, res) => {
-//     const event = req.query.event;
+app.post("/api/stats", async (req, res) => {
+    const sessionID = req.query.sessionID;
 
-//     if (!event) return res.status(400).json({ message: "event is required" })
-//     if (typeof event != "string") return res.status(400).json({ message: "event must be an string" })
-
-//     if (!["trends.click"].includes(event)) return res.status(400).json({ message: "invalid event" })
+    if (!sessionID) return res.status(400).json({ message: "sessionID is required" })
+    if (typeof sessionID != "string") return res.status(400).json({ message: "sessionID must be an string" })
 
 
-//     const data = req.query.data;
+    const event = req.query.action; //action because "event" cause an error
 
-//     if (!data) return res.status(400).json({ message: "data is required" })
-//     if (typeof data != "string") return res.status(400).json({ message: "data must be an string" })
+    if (!event) return res.status(400).json({ message: "event is required" })
+    if (typeof event != "string") return res.status(400).json({ message: "event must be an string" })
 
-//     StatsSchema.create({
-//         event: event,
-//         data: data
-//     })
+    if (!["trends.click"].includes(event)) return res.status(400).json({ message: "invalid event" })
 
-//     return res.json({ ok: true })
-// })
+    const data = req.query.data;
+
+    if (!data) return res.status(400).json({ message: "data is required" })
+    if (typeof data != "string") return res.status(400).json({ message: "data must be an string" })
+
+    StatsSchema.create({
+        event: event,
+        data: data,
+        sessionID: sessionID
+    })
+
+    return res.json({ ok: true });
+})
+
+app.get('*', function (req, res) {
+    res.status(404).send({message: "Route not found"});
+});
+
+app.post('*', function (req, res) {
+    res.status(404).send({message: "Route not found"});
+});
 
 app.listen(process.env.PORT, () => {
     console.log(`Aplicativo iniciado em ${process.env.PORT}`)
