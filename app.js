@@ -179,9 +179,6 @@ async function getTrending(limit) {
     const hourtrends = removeDuplicatedTrends(_hourtrends).slice(0, limit)
     const recenttrends = removeDuplicatedTrends(_recenttrends)
 
-    console.log("hourtrends", hourtrends)
-    console.log("recenttrends", recenttrends)
-
     const trends = removeDuplicatedTrends([ ...hourtrends, ...recenttrends.filter(rt => !hourtrends.find(t => t.text.toLowerCase() === rt.text.toLowerCase()))]);
 
 
