@@ -167,26 +167,39 @@ setInterval(async () => {
 
 
 async function getTrending(limit) {
-    const words = await getTrendingType(limit, "w");
-    const hashtags = await getTrendingType(limit, "h");
+    const hourwords = await getTrendingType(limit, "w", 1.5 * 60 * 60 * 1000);
+    const hourhashtags = await getTrendingType(limit, "h", 1.5 * 60 * 60 * 1000);
 
-    const trends = mergeArray(hashtags, words)
+    const recentwords = await getTrendingType(3, "w", 10 * 60 * 1000);
+    const recenthashtags = await getTrendingType(3, "h", 10 * 60 * 1000);
+
+    const _hourtrends = mergeArray(hourhashtags, hourwords)
+    const _recenttrends = mergeArray(recenthashtags, recentwords)
+
+    const hourtrends = removeDuplicatedTrends(_hourtrends).slice(0, limit)
+    const recenttrends = removeDuplicatedTrends(_recenttrends)
+
+    console.log("hourtrends", hourtrends)
+    console.log("recenttrends", recenttrends)
+
+    const trends = removeDuplicatedTrends([ ...hourtrends, ...recenttrends.filter(rt => !hourtrends.find(t => t.text.toLowerCase() === rt.text.toLowerCase()))]);
+
 
     if (cache.settings.pinWord.enabled) {
-        trends.splice(cache.settings.pinWord.position, 0, { text: cache.settings.pinWord.word, count: cache.settings.pinWord.count });
+        trends.splice(cache.settings.pinWord.position, 0, { text: cache.settings.pinWord.word, count: cache.settings.pinWord.count, type: "special" });
         console.log(`PINNED WORD: [${cache.settings.pinWord.position}] ${cache.settings.pinWord.word} (${cache.settings.pinWord.count})`)
     }
 
-    return removeDuplicatedTrends(trends).slice(0, limit)
+    return trends;
 }
 
-async function getTrendingType(limit, type) {
-    const hoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000); // Data e hora de 2 horas atrás
+async function getTrendingType(limit, type, time) {
+    const hoursAgo = new Date(Date.now() - time); // Data e hora de x horas atrás
 
     const result = await WordSchema.aggregate([
         {
             $match: {
-                ca: { $gte: hoursAgo }, // Filtra documentos criados nos últimos 2 horas
+                ca: { $gte: hoursAgo }, // Filtra documentos criados nos últimos x horas
                 ty: type,
             }
         },
@@ -204,22 +217,23 @@ async function getTrendingType(limit, type) {
         }
     ]);
 
-    return result.filter(obj => (!cache.settings.blacklist.trends.map(t => t.toLowerCase()).includes(obj._id.toLowerCase())) && (!cache.settings.blacklist.words.find(word => obj._id.toLowerCase().includes(word.toLowerCase())))).map(obj => { return { text: obj._id, count: obj.count } }).slice(0, limit);
+    return result.filter(obj => (!cache.settings.blacklist.trends.map(t => t.toLowerCase()).includes(obj._id.toLowerCase())) && (!cache.settings.blacklist.words.find(word => obj._id.toLowerCase().includes(word.toLowerCase())))).map(obj => { return { text: obj._id, count: obj.count, timefilter: time } }).slice(0, limit);
 }
 
 function removeDuplicatedTrends(trends) {
     const wordMap = new Map();
 
-    trends.forEach(({ text, count }) => {
+    trends.forEach(({ text, count, timefilter }) => {
         const lowerCaseText = text.toLowerCase();
 
         if (wordMap.has(lowerCaseText)) {
             wordMap.set(lowerCaseText, {
                 text: wordMap.get(lowerCaseText).text,
-                count: wordMap.get(lowerCaseText).count + count
+                count: wordMap.get(lowerCaseText).count + count,
+                timefilter: wordMap.get(lowerCaseText).timefilter,
             });
         } else {
-            wordMap.set(lowerCaseText, { text, count });
+            wordMap.set(lowerCaseText, { text, count, timefilter });
         }
     });
 
