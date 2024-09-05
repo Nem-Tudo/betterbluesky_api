@@ -153,7 +153,7 @@ async function updateCacheSettings() {
 
 updateCacheTrending()
 async function updateCacheTrending() {
-    cache.trending.data = await getTrending(15)
+    cache.trending.data = await getTrending(15, 6)
     cache.trending.head.time = Date.now()
     cache.trending.head.length = cache.trending.data.length
     console.log(`=============================== Cache atualizado (${Date.now()}) ===============================`)
@@ -166,20 +166,20 @@ setInterval(async () => {
 }, 30 * 1000)
 
 
-async function getTrending(limit) {
-    const hourwords = await getTrendingType(limit, "w", 1.5 * 60 * 60 * 1000);
-    const hourhashtags = await getTrendingType(limit, "h", 1.5 * 60 * 60 * 1000);
+async function getTrending(hourlimit, recentlimit) {
+    const hourwords = await getTrendingType(hourlimit, "w", 1.5 * 60 * 60 * 1000);
+    const hourhashtags = await getTrendingType(hourlimit, "h", 1.5 * 60 * 60 * 1000);
 
-    const recentwords = await getTrendingType(3, "w", 10 * 60 * 1000);
-    const recenthashtags = await getTrendingType(3, "h", 10 * 60 * 1000);
+    const recentwords = await getTrendingType(10, "w", 10 * 60 * 1000);
+    const recenthashtags = await getTrendingType(10, "h", 10 * 60 * 1000);
 
     const _hourtrends = mergeArray(hourhashtags, hourwords)
     const _recenttrends = mergeArray(recenthashtags, recentwords)
 
-    const hourtrends = removeDuplicatedTrends(_hourtrends).slice(0, limit)
-    const recenttrends = removeDuplicatedTrends(_recenttrends)
+    const hourtrends = removeDuplicatedTrends(_hourtrends).slice(0, hourlimit)
+    const recenttrends = removeDuplicatedTrends(_recenttrends).filter(rt => !hourtrends.find(t => t.text.toLowerCase() === rt.text.toLowerCase())).slice(0, recentlimit)
 
-    const trends = removeDuplicatedTrends([ ...hourtrends, ...recenttrends.filter(rt => !hourtrends.find(t => t.text.toLowerCase() === rt.text.toLowerCase()))]);
+    const trends = removeDuplicatedTrends([ ...hourtrends, ...recenttrends]);
 
 
     if (cache.settings.pinWord.enabled) {
