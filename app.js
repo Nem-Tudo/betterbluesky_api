@@ -179,7 +179,9 @@ async function getTrending(hourlimit, recentlimit) {
     const hourtrends = removeDuplicatedTrends(_hourtrends).slice(0, hourlimit)
     const recenttrends = removeDuplicatedTrends(_recenttrends).filter(rt => !hourtrends.find(t => t.text.toLowerCase() === rt.text.toLowerCase())).slice(0, recentlimit)
 
-    const trends = removeDuplicatedTrends([ ...hourtrends, ...recenttrends]);
+    const trendsMerged = removeDuplicatedTrends([ ...hourtrends, ...recenttrends]);
+
+    const trends = sortTrends(trendsMerged); // ordena os trends com mais count para o com menos count (Testar antes de implementar)
 
 
     if (cache.settings.pinWord.enabled) {
@@ -252,6 +254,10 @@ function mergeArray(arrayA, arrayB) {
     }
 
     return result;
+}
+
+function sortTrends(trends) { //ordena os trends com mais count para o com menos count
+    return trends.sort((a, b) => b.count - a.count)
 }
 
 setInterval(() => {
