@@ -80,6 +80,9 @@ const SettingsSchema = mongoose.model("Setting", new mongoose.Schema({
         count: {
             type: Number
         },
+        message: {
+            type: String,
+        },
         position: {
             type: Number
         },
@@ -196,7 +199,7 @@ async function getTrending(hourlimit, recentlimit) {
 
 
     if (cache.settings.pinWord.enabled) {
-        trends.splice(cache.settings.pinWord.position, 0, { text: cache.settings.pinWord.word, count: cache.settings.pinWord.count, type: "special" });
+        trends.splice(cache.settings.pinWord.position, 0, { text: cache.settings.pinWord.word, count: cache.settings.pinWord.count, type: "special", message: cache.settings.pinWord.message});
         console.log(`PINNED WORD: [${cache.settings.pinWord.position}] ${cache.settings.pinWord.word} (${cache.settings.pinWord.count})`)
     }
 
