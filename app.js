@@ -199,7 +199,7 @@ async function getTrending(hourlimit, recentlimit) {
 
 
     if (cache.settings.pinWord.enabled) {
-        trends.splice(cache.settings.pinWord.position, 0, { text: cache.settings.pinWord.word, count: cache.settings.pinWord.count, type: "special", message: cache.settings.pinWord.message});
+        trends.splice(cache.settings.pinWord.position, 0, { text: cache.settings.pinWord.word, count: cache.settings.pinWord.count, timefilter: 0, message: cache.settings.pinWord.message });
         console.log(`PINNED WORD: [${cache.settings.pinWord.position}] ${cache.settings.pinWord.word} (${cache.settings.pinWord.count})`)
     }
 
@@ -295,10 +295,15 @@ function getHashtags(texto) {
     return texto.match(regex) || [];
 }
 
+let hasSendSomeTrending = false;
 
 app.get("/api/trends", (req, res) => {
     res.json(cache.trending)
-    cache.stats.last30sSessions.set(req.query.sessionID, req.query.updateCount)
+    if(req.query.sessionID) cache.stats.last30sSessions.set(req.query.sessionID, req.query.updateCount)
+    
+    //Gambiarra gigante para reinciar o app quando houver o erro misterioso de começar a retornar array vazia nos trends (Me ajude e achar!)
+    if (cache.trending.data.length > 0) hasSendSomeTrending = true;
+    if(hasSendSomeTrending && (cache.trending.data.length === 0)) process.exit(1)
 })
 
 app.post("/api/stats", async (req, res) => {
@@ -330,11 +335,11 @@ app.post("/api/stats", async (req, res) => {
 })
 
 app.get('*', function (req, res) {
-    res.status(404).send({message: "Route not found"});
+    res.status(404).send({ message: "Route not found" });
 });
 
 app.post('*', function (req, res) {
-    res.status(404).send({message: "Route not found"});
+    res.status(404).send({ message: "Route not found" });
 });
 
 app.listen(process.env.PORT, () => {
