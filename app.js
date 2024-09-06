@@ -34,6 +34,30 @@ const WordSchema = mongoose.model("Word", new mongoose.Schema({
     }
 }));
 
+const UserSchema = mongoose.model("User", new mongoose.Schema({
+    h: { //handle
+        type: String,
+        required: true,
+    },
+    d: { //did
+        type: String,
+        required: true,
+    },
+    s: { //BetterBluesky SessionID created
+        type: String,
+        required: true
+    },
+    ll: { //last login
+        type: Date,
+        default: () => new Date()
+    },
+    ca: { //created at
+        type: Date,
+        immutable: true,
+        default: () => new Date()
+    }
+}));
+
 const StatsSchema = mongoose.model("Stats", new mongoose.Schema({
     event: {
         type: String,
@@ -87,6 +111,14 @@ const SettingsSchema = mongoose.model("Setting", new mongoose.Schema({
             type: Number
         },
     },
+    trendsMessages: [{ //se a palavra está nos trends, adiciona uma mensagem nela
+        word: {
+            type: String,
+        },
+        message: {
+            type: String,
+        }
+    }],
     config: {
         acceptableStats: {
             type: Array,
@@ -118,6 +150,7 @@ const cache = {
             count: 0,
             position: 0,
         },
+        trendsMessages: [],
         config: {
             acceptableStats: []
         }
@@ -158,13 +191,13 @@ client.on('message', message => {
     }
 })
 
-
 updateCacheSettings()
 async function updateCacheSettings() {
     const settings = (await SettingsSchema.findOne({})) || await SettingsSchema.create({})
     cache.settings.blacklist = settings.blacklist;
     cache.settings.pinWord = settings.pinWord;
-    cache.settings.config.acceptableStats = settings.config.acceptableStats;
+    cache.settings.config = settings.config;
+    cache.settings.trendsMessages = settings.trendsMessages
 }
 
 updateCacheTrending()
@@ -179,7 +212,7 @@ async function updateCacheTrending() {
 setInterval(async () => {
     await updateCacheTrending()
     await updateCacheSettings()
-}, 30 * 1000)
+}, 29 * 1000)
 
 
 async function getTrending(hourlimit, recentlimit) {
@@ -196,6 +229,12 @@ async function getTrending(hourlimit, recentlimit) {
     const recenttrends = removeDuplicatedTrends(_recenttrends).filter(rt => !hourtrends.find(t => t.text.toLowerCase() === rt.text.toLowerCase())).slice(0, recentlimit)
 
     const trends = removeDuplicatedTrends([...hourtrends, ...recenttrends]);
+
+    trends.forEach(trend => {
+        if (cache.settings.trendsMessages.find(t => t.word === trend.text)) {
+            trend.message = cache.settings.trendsMessages.find(t => t.word === trend.text).message;
+        }
+    });
 
 
     if (cache.settings.pinWord.enabled) {
@@ -270,9 +309,10 @@ function mergeArray(arrayA, arrayB) {
     return result;
 }
 
-setInterval(() => {
-    deleteOlds(3)
+setTimeout(() => {
+    deleteOlds(3, 1000 * 60 * 60 * 1)
 }, 1000 * 60 * 60 * 1)
+
 
 //log stats
 setInterval(() => {
@@ -280,7 +320,8 @@ setInterval(() => {
     cache.stats.last30sSessions = new Map()
 }, 1000 * 30)
 
-async function deleteOlds(hours) { //apaga as words antes de x horas
+async function deleteOlds(hours, loopTimer) { //apaga as words antes de x horas
+    console.log(`Apagando documentos de antes de horas: ${hours}`)
     const hoursAgo = new Date(Date.now() - hours * 60 * 60 * 1000); // Data e hora de x horas atrás
 
     const result = await WordSchema.deleteMany({ "ca": { $lt: hoursAgo } });
@@ -288,6 +329,9 @@ async function deleteOlds(hours) { //apaga as words antes de x horas
     console.log("-----------------------------------------------------------------------");
     console.log(`Removed before ${hours}h: ${result.deletedCount}`);
     console.log("-----------------------------------------------------------------------");
+    setTimeout(() => {
+        deleteOlds(3, 1000 * 60 * 60 * 1)
+    }, loopTimer)
 }
 
 function getHashtags(texto) {
@@ -299,11 +343,11 @@ let hasSendSomeTrending = false;
 
 app.get("/api/trends", (req, res) => {
     res.json(cache.trending)
-    if(req.query.sessionID) cache.stats.last30sSessions.set(req.query.sessionID, req.query.updateCount)
-    
+    if (req.query.sessionID) cache.stats.last30sSessions.set(req.query.sessionID, req.query.updateCount)
+
     //Gambiarra gigante para reinciar o app quando houver o erro misterioso de começar a retornar array vazia nos trends (Me ajude e achar!)
     if (cache.trending.data.length > 0) hasSendSomeTrending = true;
-    if(hasSendSomeTrending && (cache.trending.data.length === 0)) process.exit(1)
+    if (hasSendSomeTrending && (cache.trending.data.length === 0)) process.exit(1)
 })
 
 app.post("/api/stats", async (req, res) => {
@@ -332,6 +376,45 @@ app.post("/api/stats", async (req, res) => {
     })
 
     return res.json({ ok: true });
+})
+
+app.post("/api/stats/users", async (req, res) => {
+
+    try {
+        const sessionID = req.query.sessionID;
+
+        if (!sessionID) return res.status(400).json({ message: "sessionID is required" })
+        if (typeof sessionID != "string") return res.status(400).json({ message: "sessionID must be an string" })
+
+        const handle = req.query.handle;
+
+        if (!handle) return res.status(400).json({ message: "handle is required" })
+        if (typeof handle != "string") return res.status(400).json({ message: "handle must be an string" })
+
+        const did = req.query.did;
+
+        if (!did) return res.status(400).json({ message: "did is required" })
+        if (typeof did != "string") return res.status(400).json({ message: "did must be an string" })
+
+        const existUser = await UserSchema.findOne({ h: handle, d: did });
+
+        if (existUser) {
+            existUser.ll = Date.now();
+            await existUser.save()
+            return res.json({ message: "updated" })
+        }
+
+        await UserSchema.create({ //salva os usuários que utilizam a extensão para futuras atualizações
+            h: handle,
+            d: did,
+            s: sessionID
+        })
+
+        return res.json({ message: "created" })
+    } catch (e) {
+        console.log(e)
+        res.status(500).json({ message: "Internal Server Error" })
+    }
 })
 
 app.get('*', function (req, res) {
