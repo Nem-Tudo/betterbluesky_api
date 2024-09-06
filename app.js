@@ -101,8 +101,7 @@ const cache = {
         data: []
     },
     stats: {
-        last60sRequestTrends: 0,
-        last30sRequestTrends: 0,
+        last30sSessions: new Map()
     },
     settings: {
         blacklist: {
@@ -274,14 +273,9 @@ setInterval(() => {
 
 //log stats
 setInterval(() => {
-    console.log(`Últimos 30s: ${cache.stats.last30sRequestTrends}`);
-    cache.stats.last30sRequestTrends = 0;
+    console.log(`Sessões últimos 30s: ${cache.stats.last30sSessions.size}`);
+    cache.stats.last30sSessions = new Map()
 }, 1000 * 30)
-
-setInterval(() => {
-    console.log(`Últimos 60s: ${cache.stats.last60sRequestTrends}`);
-    cache.stats.last60sRequestTrends = 0;
-}, 1000 * 60)
 
 async function deleteOlds(hours) { //apaga as words antes de x horas
     const hoursAgo = new Date(Date.now() - hours * 60 * 60 * 1000); // Data e hora de x horas atrás
@@ -300,10 +294,8 @@ function getHashtags(texto) {
 
 
 app.get("/api/trends", (req, res) => {
-    // console.log(`[${Date.now()}] GET - /trends (${req.query.updateCount})`)
     res.json(cache.trending)
-    cache.stats.last30sRequestTrends++;
-    cache.stats.last60sRequestTrends++;
+    cache.stats.last30sSessions.set(req.query.sessionID, req.query.updateCount)
 })
 
 app.post("/api/stats", async (req, res) => {
