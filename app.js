@@ -84,6 +84,12 @@ const SettingsSchema = mongoose.model("Setting", new mongoose.Schema({
             type: Number
         },
     },
+    config: {
+        acceptableStats: {
+            type: Array,
+            default: []
+        }
+    }
 }))
 
 const cache = {
@@ -109,6 +115,9 @@ const cache = {
             word: "",
             count: 0,
             position: 0,
+        },
+        config: {
+            acceptableStats: []
         }
     }
 }
@@ -153,6 +162,7 @@ async function updateCacheSettings() {
     const settings = (await SettingsSchema.findOne({})) || await SettingsSchema.create({})
     cache.settings.blacklist = settings.blacklist;
     cache.settings.pinWord = settings.pinWord;
+    cache.settings.config.acceptableStats = settings.config.acceptableStats;
 }
 
 updateCacheTrending()
@@ -308,7 +318,7 @@ app.post("/api/stats", async (req, res) => {
     if (!event) return res.status(400).json({ message: "event is required" })
     if (typeof event != "string") return res.status(400).json({ message: "event must be an string" })
 
-    if (!["trends.click"].includes(event)) return res.status(400).json({ message: "invalid event" })
+    if (!cache.settings.config.acceptableStats.includes(event)) return res.status(400).json({ message: "invalid event" })
 
     const data = req.query.data;
 
