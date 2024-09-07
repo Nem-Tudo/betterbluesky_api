@@ -155,7 +155,8 @@ const cache = {
         data: []
     },
     stats: {
-        last30sSessions: new Map()
+        last30sSessions: new Map(),
+        last30sSessionsCountStore: 0
     },
     settings: {
         blacklist: {
@@ -336,6 +337,7 @@ setTimeout(() => {
 //log stats
 setInterval(() => {
     console.log(`Sessões últimos 30s: ${cache.stats.last30sSessions.size}`);
+    cache.stats.last30sSessionsCountStore = cache.stats.last30sSessions.size;
     cache.stats.last30sSessions = new Map()
 }, 1000 * 30)
 
@@ -441,6 +443,12 @@ app.get("/api/trendsmessages", async (req, res) => {
     const settings = await SettingsSchema.findOne({});
 
     return res.json(settings.trendsMessages)
+})
+
+app.get("/api/stats", async (req, res) => {
+    return res.json({
+        last30sonline: cache.stats.last30sSessionsCountStore
+    })
 })
 
 app.put("/api/admin/trendsmessages", async (req, res) => {
