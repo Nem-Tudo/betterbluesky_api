@@ -456,7 +456,7 @@ app.put("/api/admin/trendsmessages", async (req, res) => {
     const settings = await SettingsSchema.findOne({});
 
     try {
-        const trendsmessages = JSON.parse(req.query.trendsmessages);
+        const trendsmessages = JSON.parse(decodeURIComponent(req.query.trendsmessages));
         settings.trendsMessages = trendsmessages;
         await settings.save();
         return res.json(settings.trendsMessages)
