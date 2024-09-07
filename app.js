@@ -170,7 +170,7 @@ client.on('message', message => {
             const text = op.payload.text.trim();
 
             const posthashtags = getHashtags(text);
-            const postwords = text.trim().split(" ").filter(word => (word.length > 2) && (word.length < 64) && !word.startsWith("#"))
+            const postwords = [...new Set(text.trim().split(" ").filter(word => (word.length > 2) && (word.length < 64) && !word.startsWith("#")))]
 
             for (const hashtag of posthashtags) {
                 if (hashtag.length > 2) {
