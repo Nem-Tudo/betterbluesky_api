@@ -251,8 +251,8 @@ async function getTrending(hourlimit, recentlimit) {
     const trends = removeDuplicatedTrends([...hourtrends, ...recenttrends]);
 
     trends.forEach(trend => {
-        if (cache.settings.trendsMessages.find(t => t.word === trend.text)) {
-            trend.message = cache.settings.trendsMessages.find(t => t.word === trend.text).message;
+        if (cache.settings.trendsMessages.find(t => t.word.toLowerCase() === trend.text.toLowerCase())) {
+            trend.message = cache.settings.trendsMessages.find(t => t.word.toLowerCase() === trend.text.toLowerCase()).message;
         }
     });
 
