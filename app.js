@@ -34,6 +34,25 @@ const WordSchema = mongoose.model("Word", new mongoose.Schema({
     }
 }));
 
+const TokenSchema = mongoose.model("Token", new mongoose.Schema({ //usado para acessar funções de admin
+    token: {
+        type: String,
+        required: true,
+    },
+    name: {
+        type: String, //nome do token
+    },
+    permissions: {
+        type: String,
+        required: true,
+    },
+    createdAt: {
+        type: Date,
+        immutable: true,
+        default: () => new Date()
+    }
+}));
+
 const UserSchema = mongoose.model("User", new mongoose.Schema({
     h: { //handle
         type: String,
@@ -411,6 +430,42 @@ app.post("/api/stats/users", async (req, res) => {
         })
 
         return res.json({ message: "created" })
+    } catch (e) {
+        console.log(e)
+        res.status(500).json({ message: "Internal Server Error" })
+    }
+})
+
+app.get("/api/trendsmessages", async (req, res) => {
+    const tokenstring = req.headers.authorization;
+    if (!tokenstring) return res.status(401).json({ message: "Token is required" })
+
+    const token = await TokenSchema.findOne({ token: tokenstring });
+    if (!token) return res.status(401).json({ message: "Unauthorized" });
+
+    const settings = await SettingsSchema.findOne({});
+
+    return res.json(settings.trendsMessages)
+})
+
+app.put("/api/admin/trendsmessages", async (req, res) => {
+    const tokenstring = req.headers.authorization;
+    if (!tokenstring) return res.status(401).json({ message: "Token is required" })
+
+    const token = await TokenSchema.findOne({ token: tokenstring });
+    if (!token) return res.status(401).json({ message: "Unauthorized" });
+
+    if(!token.permissions.includes("*")){
+        if (!token.permissions.includes("trendsmessages.manage")) return res.status(403).json({ message: "Missing permissions" });
+    }
+    const settings = await SettingsSchema.findOne({});
+
+    try {
+        const trendsmessages = JSON.parse(req.query.trendsmessages);
+        settings.trendsMessages = trendsmessages;
+        await settings.save();
+        return res.json(settings.trendsMessages)
+
     } catch (e) {
         console.log(e)
         res.status(500).json({ message: "Internal Server Error" })
