@@ -437,12 +437,7 @@ app.post("/api/stats/users", async (req, res) => {
 })
 
 app.get("/api/trendsmessages", async (req, res) => {
-    const tokenstring = req.headers.authorization;
-    if (!tokenstring) return res.status(401).json({ message: "Token is required" })
-
-    const token = await TokenSchema.findOne({ token: tokenstring });
-    if (!token) return res.status(401).json({ message: "Unauthorized" });
-
+    console.log(`${Date.now()} /api/trendsmessages`)
     const settings = await SettingsSchema.findOne({});
 
     return res.json(settings.trendsMessages)
