@@ -291,7 +291,6 @@ async function updateCacheSettings() {
     cache.settings.trendsMessages = settings.trendsMessages
 }
 
-updateCacheTrending()
 async function updateCacheTrending() {
     cache.trending.data = await getTrending(15, 6)
     cache.trending.head.time = Date.now()
@@ -301,8 +300,8 @@ async function updateCacheTrending() {
 }
 
 setInterval(async () => {
-    await updateCacheTrending()
     await updateCacheSettings()
+    updateCacheTrending()
 }, 29 * 1000)
 
 
@@ -591,7 +590,6 @@ app.post('*', function (req, res) {
 
 app.listen(process.env.PORT, () => {
     console.log(`Aplicativo iniciado em ${process.env.PORT}`)
-    updateCacheTrending()
     updateCacheSettings()
     // deleteOlds(3)
 })
