@@ -356,7 +356,7 @@ async function deleteOlds(hours, loopTimer) { //apaga as words antes de x horas
 }
 
 function getHashtags(texto) {
-    const regex = /#\w+/g;
+    const regex = /#([\wÀ-ÖØ-öø-ÿ]+)/g;
     return texto.match(regex) || [];
 }
 
