@@ -3,7 +3,9 @@ require("dotenv").config()
 const { ComAtprotoSyncSubscribeRepos, SubscribeReposMessage, subscribeRepos } = require("atproto-firehose");
 const mongoose = require("mongoose");
 
-mongoose.connect(process.env.MONGODB);
+// The database is divided into two: The one that stores the words of all posts and the one that stores information from BetterBluesky. If everyone goes to the same bank, it causes slowdowns.
+const database_words = mongoose.createConnection(process.env.MONGODB_WORDS); 
+const database = mongoose.createConnection(process.env.MONGODB);
 
 const express = require("express");
 
@@ -14,7 +16,7 @@ app.use(cors({
     origin: "*"
 }))
 
-const WordSchema = mongoose.model("Word", new mongoose.Schema({
+const WordSchema = database_words.model("Word", new mongoose.Schema({
     t: { //texto
         type: String,
         required: true,
@@ -34,7 +36,73 @@ const WordSchema = mongoose.model("Word", new mongoose.Schema({
     }
 }));
 
-const TokenSchema = mongoose.model("Token", new mongoose.Schema({ //usado para acessar funções de admin
+const PollSchema = database.model("Poll", new mongoose.Schema({
+    id: {
+        type: String,
+        unique: true,
+        required: true
+    },
+    authorDid: {
+        type: String,
+        required: true
+    },
+    title: {
+        type: String,
+        required: true,
+        minLength: 1,
+        maxLength: 32
+    },
+    options: [{
+        text: {
+            type: String,
+            minLength: 1,
+            maxLength: 32
+        },
+        voteCount: {
+            type: Number,
+            default: 0
+        }
+    }],
+    createdAt: { //created at
+        type: Date,
+        immutable: true,
+        default: () => new Date()
+    }
+}).set("toObject", {
+    transform: (doc, ret, options) => {
+        delete ret._id;
+        delete ret.__v;
+        return ret;
+    }
+}))
+
+const PollVoteSchema = database.model("PollVote", new mongoose.Schema({
+    pollId: {
+        type: String,
+        required: true,
+    },
+    userdid: {
+        type: String,
+        required: true
+    },
+    option: { //position in options array
+        type: Number,
+        required: true
+    },
+    createdAt: { //created at
+        type: Date,
+        immutable: true,
+        default: () => new Date()
+    }
+}).set("toObject", {
+    transform: (doc, ret, options) => {
+        delete ret._id;
+        delete ret.__v;
+        return ret;
+    }
+}))
+
+const TokenSchema = database.model("Token", new mongoose.Schema({ //usado para acessar funções de admin
     token: {
         type: String,
         required: true,
@@ -53,7 +121,7 @@ const TokenSchema = mongoose.model("Token", new mongoose.Schema({ //usado para a
     }
 }));
 
-const UserSchema = mongoose.model("User", new mongoose.Schema({
+const UserSchema = database.model("User", new mongoose.Schema({
     h: { //handle
         type: String,
         required: true,
@@ -62,10 +130,13 @@ const UserSchema = mongoose.model("User", new mongoose.Schema({
         type: String,
         required: true,
     },
-    s: { //BetterBluesky SessionID created
+    s: { //BetterBluesky last SessionID
         type: String,
         required: true
     },
+    ss: [{ //BetterBluesky all SessionID's
+        type: String,
+    }],
     ll: { //last login
         type: Date,
         default: () => new Date()
@@ -77,7 +148,7 @@ const UserSchema = mongoose.model("User", new mongoose.Schema({
     }
 }));
 
-const StatsSchema = mongoose.model("Stats", new mongoose.Schema({
+const StatsSchema = database.model("Stats", new mongoose.Schema({
     event: {
         type: String,
         required: true,
@@ -97,7 +168,7 @@ const StatsSchema = mongoose.model("Stats", new mongoose.Schema({
     }
 }));
 
-const SettingsSchema = mongoose.model("Setting", new mongoose.Schema({
+const SettingsSchema = database.model("Setting", new mongoose.Schema({
     blacklist: {
         trends: {
             type: Array,
@@ -235,6 +306,296 @@ setInterval(async () => {
 }, 29 * 1000)
 
 
+setTimeout(() => {
+    deleteOlds(3, 1000 * 60 * 60 * 1)
+}, 1000 * 60 * 60 * 1)
+
+
+//log stats
+setInterval(() => {
+    console.log(`Sessões últimos 30s: ${cache.stats.last30sSessions.size}`);
+    cache.stats.last30sSessionsCountStore = cache.stats.last30sSessions.size;
+    cache.stats.last30sSessions = new Map()
+}, 1000 * 30)
+
+async function deleteOlds(hours, loopTimer) { //apaga as words antes de x horas
+    console.log(`Apagando documentos de antes de horas: ${hours}`)
+    const hoursAgo = new Date(Date.now() - hours * 60 * 60 * 1000); // Data e hora de x horas atrás
+
+    const result = await WordSchema.deleteMany({ "ca": { $lt: hoursAgo } });
+
+    console.log("-----------------------------------------------------------------------");
+    console.log(`Removed before ${hours}h: ${result.deletedCount}`);
+    console.log("-----------------------------------------------------------------------");
+    setTimeout(() => {
+        deleteOlds(3, 1000 * 60 * 60 * 1)
+    }, loopTimer)
+}
+
+function getHashtags(texto) {
+    const regex = /#([\wÀ-ÖØ-öø-ÿ]+)/g;
+    return texto.match(regex) || [];
+}
+
+let hasSendSomeTrending = false;
+
+
+app.post("/api/polls", async (req, res) => {
+    const sessionID = req.query.sessionID;
+
+    if (!sessionID) return res.status(400).json({ message: "sessionID is required" })
+    if (typeof sessionID != "string") return res.status(400).json({ message: "sessionID must be an string" })
+
+    const polldatastring = req.query.polldata;
+
+    if (!polldatastring) return res.status(400).json({ message: "polldata is required" })
+    if (typeof polldatastring != "string") return res.status(400).json({ message: "polldata must be an string" })
+
+    let polldata = null;
+
+    try {
+        polldata = JSON.parse(decodeURIComponent(polldatastring))
+    } catch (e) {
+        return res.status(400).json({ message: "polldata must be an json string" })
+    }
+
+    if (!polldata) return;
+
+    if ((!polldata.title) || (typeof polldata.title != "string")) return res.status(400).json({ message: "polldata.title must be an string" });
+    if ((polldata.title.length < 1) || (polldata.title.length > 32)) return res.status(400).json({ message: "polldata.title must be between 1 and 32 characters" });
+
+    if ((!polldata.options) || (!Array.isArray(polldata.options))) return res.status(400).json({ message: "polldata.options must be an array" });
+
+    if ((polldata.options.length < 1) || (polldata.options.length > 5)) return res.status(400).json({ message: "polldata.options must be between 1 and 5 itens" });
+
+    if (polldata.options.some(option => typeof option != "string")) return res.status(400).json({ message: "polldata.options.* must be an string" });
+    if (polldata.options.some(option => (option.length < 1) || (option.length > 32))) return res.status(400).json({ message: "polldata.options.* must be between 1 and 32 characters" });
+
+    try {
+
+        const user = await UserSchema.findOne({ ss: sessionID });
+        if (!user) return res.status(403).json({ message: "Invalid SessionID" })
+
+
+        const pollid = `${Date.now()}${randomString(3, false)}`
+
+        const poll = await PollSchema.create({ id: pollid, authorDid: user.d, title: polldata.title, options: polldata.options.map(string => { return { text: string } }) });
+
+        return res.json(poll.toObject())
+    } catch (e) {
+        console.log("poll create", e)
+        res.status(500).json({ message: "Internal Server Error" })
+    }
+
+})
+
+app.get("/api/polls/:pollId", async (req, res) => {
+    const sessionID = req.query.sessionID;
+
+    if (!sessionID) return res.status(400).json({ message: "sessionID is required" })
+    if (typeof sessionID != "string") return res.status(400).json({ message: "sessionID must be an string" })
+
+    const pollID = req.params.pollId;
+
+    if (!pollID) return res.status(400).json({ message: "id is required" })
+    if (typeof pollID != "string") return res.status(400).json({ message: "id must be an string" })
+
+
+    const poll = await PollSchema.findOne({ id: pollID });
+
+    if (!poll) return res.status(404).json({ message: "poll not found" })
+
+    const pollObject = poll.toObject();
+
+    const user = await UserSchema.findOne({ ss: sessionID });
+
+    const userPollVote = user ? (await PollVoteSchema.findOne({ pollId: poll.id, userdid: user.d })) : null;
+
+    pollObject.voted = !!userPollVote;
+
+    pollObject.options.forEach((option, index) => {
+        option.selected = userPollVote ? (userPollVote.option === index) : false
+    })
+
+    return res.json(pollObject)
+
+})
+
+app.post("/api/polls/:pollId/votes", async (req, res) => {
+    const sessionID = req.query.sessionID;
+
+    if (!sessionID) return res.status(400).json({ message: "sessionID is required" })
+    if (typeof sessionID != "string") return res.status(400).json({ message: "sessionID must be an string" })
+
+    const pollid = req.params.pollId
+
+    if (!pollid) return res.status(400).json({ message: "pollid is required" })
+    if (typeof pollid != "string") return res.status(400).json({ message: "pollid must be an string" })
+
+    const option = Number(req.query.option);
+
+    if (isNaN(option)) return res.status(400).json({ message: "option must be an number" })
+
+    const user = await UserSchema.findOne({ ss: sessionID });
+    if (!user) return res.status(403).json({ message: "Invalid SessionID" })
+
+
+    const poll = await PollSchema.findOne({ id: pollid });
+    if (!poll) return res.status(404).json({ message: "Poll not found" });
+
+    if (option > poll.options.length) return res.status(400).json({ message: "Invalid option" });
+
+    const existPollVote = await PollVoteSchema.findOne({
+        pollId: pollid,
+        userdid: user.d,
+    })
+
+    if (existPollVote) return res.json(existPollVote.toObject())
+
+    const pollVote = await PollVoteSchema.create({
+        pollId: pollid,
+        userdid: user.d,
+        option: option
+    });
+
+    poll.options[option].voteCount++;
+    poll.save()
+
+    res.json(pollVote.toObject())
+
+})
+
+app.get("/api/trends", (req, res) => {
+    res.json(cache.trending)
+    if (req.query.sessionID) cache.stats.last30sSessions.set(req.query.sessionID, req.query.updateCount)
+
+    //Gambiarra gigante para reinciar o app quando houver o erro misterioso de começar a retornar array vazia nos trends (Me ajude e achar!)
+    if (cache.trending.data.length > 0) hasSendSomeTrending = true;
+    if (hasSendSomeTrending && (cache.trending.data.length === 0)) process.exit(1)
+})
+
+app.post("/api/stats", async (req, res) => {
+    const sessionID = req.query.sessionID;
+
+    if (!sessionID) return res.status(400).json({ message: "sessionID is required" })
+    if (typeof sessionID != "string") return res.status(400).json({ message: "sessionID must be an string" })
+
+
+    const event = req.query.action; //action because "event" cause an error
+
+    if (!event) return res.status(400).json({ message: "event is required" })
+    if (typeof event != "string") return res.status(400).json({ message: "event must be an string" })
+
+    if (!cache.settings.config.acceptableStats.includes(event)) return res.status(400).json({ message: "invalid event" })
+
+    const data = req.query.data;
+
+    if (!data) return res.status(400).json({ message: "data is required" })
+    if (typeof data != "string") return res.status(400).json({ message: "data must be an string" })
+
+    StatsSchema.create({
+        event: event,
+        data: data,
+        sessionID: sessionID
+    })
+
+    return res.json({ ok: true });
+})
+
+app.post("/api/stats/users", async (req, res) => {
+
+    try {
+        const sessionID = req.query.sessionID;
+
+        if (!sessionID) return res.status(400).json({ message: "sessionID is required" })
+        if (typeof sessionID != "string") return res.status(400).json({ message: "sessionID must be an string" })
+
+        const handle = req.query.handle;
+
+        if (!handle) return res.status(400).json({ message: "handle is required" })
+        if (typeof handle != "string") return res.status(400).json({ message: "handle must be an string" })
+
+        const did = req.query.did;
+
+        if (!did) return res.status(400).json({ message: "did is required" })
+        if (typeof did != "string") return res.status(400).json({ message: "did must be an string" })
+
+        const existUser = await UserSchema.findOne({ h: handle, d: did });
+
+        if (existUser) {
+            existUser.ll = Date.now();
+            existUser.s = sessionID;
+            existUser.ss.push(sessionID);
+            await existUser.save()
+            return res.json({ message: "updated" })
+        }
+
+        await UserSchema.create({ //salva os usuários que utilizam a extensão para futuras atualizações
+            h: handle,
+            d: did,
+            s: sessionID,
+            ss: [sessionID]
+        })
+
+        return res.json({ message: "created" })
+    } catch (e) {
+        console.log(e)
+        res.status(500).json({ message: "Internal Server Error" })
+    }
+})
+
+app.get("/api/trendsmessages", async (req, res) => {
+    console.log(`${Date.now()} /api/trendsmessages`)
+    const settings = await SettingsSchema.findOne({});
+
+    return res.json(settings.trendsMessages)
+})
+
+app.get("/api/stats", async (req, res) => {
+    return res.json({
+        last30sonline: cache.stats.last30sSessionsCountStore
+    })
+})
+
+app.put("/api/admin/trendsmessages", async (req, res) => {
+    const tokenstring = req.headers.authorization;
+    if (!tokenstring) return res.status(401).json({ message: "Token is required" })
+
+    const token = await TokenSchema.findOne({ token: tokenstring });
+    if (!token) return res.status(401).json({ message: "Unauthorized" });
+
+    if (!token.permissions.includes("*")) {
+        if (!token.permissions.includes("trendsmessages.manage")) return res.status(403).json({ message: "Missing permissions" });
+    }
+    const settings = await SettingsSchema.findOne({});
+
+    try {
+        const trendsmessages = JSON.parse(decodeURIComponent(req.query.trendsmessages));
+        settings.trendsMessages = trendsmessages;
+        await settings.save();
+        return res.json(settings.trendsMessages)
+
+    } catch (e) {
+        console.log(e)
+        res.status(500).json({ message: "Internal Server Error" })
+    }
+})
+
+app.get('*', function (req, res) {
+    res.status(404).send({ message: "Route not found" });
+});
+
+app.post('*', function (req, res) {
+    res.status(404).send({ message: "Route not found" });
+});
+
+app.listen(process.env.PORT, () => {
+    console.log(`Aplicativo iniciado em ${process.env.PORT}`)
+    updateCacheTrending()
+    updateCacheSettings()
+    // deleteOlds(3)
+})
+
 async function getTrending(hourlimit, recentlimit) {
     const hourwords = await getTrendingType(hourlimit, "w", 1.5 * 60 * 60 * 1000);
     const hourhashtags = await getTrendingType(hourlimit, "h", 1.5 * 60 * 60 * 1000);
@@ -329,163 +690,14 @@ function mergeArray(arrayA, arrayB) {
     return result;
 }
 
-setTimeout(() => {
-    deleteOlds(3, 1000 * 60 * 60 * 1)
-}, 1000 * 60 * 60 * 1)
-
-
-//log stats
-setInterval(() => {
-    console.log(`Sessões últimos 30s: ${cache.stats.last30sSessions.size}`);
-    cache.stats.last30sSessionsCountStore = cache.stats.last30sSessions.size;
-    cache.stats.last30sSessions = new Map()
-}, 1000 * 30)
-
-async function deleteOlds(hours, loopTimer) { //apaga as words antes de x horas
-    console.log(`Apagando documentos de antes de horas: ${hours}`)
-    const hoursAgo = new Date(Date.now() - hours * 60 * 60 * 1000); // Data e hora de x horas atrás
-
-    const result = await WordSchema.deleteMany({ "ca": { $lt: hoursAgo } });
-
-    console.log("-----------------------------------------------------------------------");
-    console.log(`Removed before ${hours}h: ${result.deletedCount}`);
-    console.log("-----------------------------------------------------------------------");
-    setTimeout(() => {
-        deleteOlds(3, 1000 * 60 * 60 * 1)
-    }, loopTimer)
+function randomString(length, uppercases = true) {
+    let result = '';
+    const characters = uppercases ? 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789' : 'abcdefghijklmnopqrstuvwxyz0123456789';
+    const charactersLength = characters.length;
+    let counter = 0;
+    while (counter < length) {
+        result += characters.charAt(Math.floor(Math.random() * charactersLength));
+        counter += 1;
+    }
+    return result;
 }
-
-function getHashtags(texto) {
-    const regex = /#([\wÀ-ÖØ-öø-ÿ]+)/g;
-    return texto.match(regex) || [];
-}
-
-let hasSendSomeTrending = false;
-
-app.get("/api/trends", (req, res) => {
-    res.json(cache.trending)
-    if (req.query.sessionID) cache.stats.last30sSessions.set(req.query.sessionID, req.query.updateCount)
-
-    //Gambiarra gigante para reinciar o app quando houver o erro misterioso de começar a retornar array vazia nos trends (Me ajude e achar!)
-    if (cache.trending.data.length > 0) hasSendSomeTrending = true;
-    if (hasSendSomeTrending && (cache.trending.data.length === 0)) process.exit(1)
-})
-
-app.post("/api/stats", async (req, res) => {
-    const sessionID = req.query.sessionID;
-
-    if (!sessionID) return res.status(400).json({ message: "sessionID is required" })
-    if (typeof sessionID != "string") return res.status(400).json({ message: "sessionID must be an string" })
-
-
-    const event = req.query.action; //action because "event" cause an error
-
-    if (!event) return res.status(400).json({ message: "event is required" })
-    if (typeof event != "string") return res.status(400).json({ message: "event must be an string" })
-
-    if (!cache.settings.config.acceptableStats.includes(event)) return res.status(400).json({ message: "invalid event" })
-
-    const data = req.query.data;
-
-    if (!data) return res.status(400).json({ message: "data is required" })
-    if (typeof data != "string") return res.status(400).json({ message: "data must be an string" })
-
-    StatsSchema.create({
-        event: event,
-        data: data,
-        sessionID: sessionID
-    })
-
-    return res.json({ ok: true });
-})
-
-app.post("/api/stats/users", async (req, res) => {
-
-    try {
-        const sessionID = req.query.sessionID;
-
-        if (!sessionID) return res.status(400).json({ message: "sessionID is required" })
-        if (typeof sessionID != "string") return res.status(400).json({ message: "sessionID must be an string" })
-
-        const handle = req.query.handle;
-
-        if (!handle) return res.status(400).json({ message: "handle is required" })
-        if (typeof handle != "string") return res.status(400).json({ message: "handle must be an string" })
-
-        const did = req.query.did;
-
-        if (!did) return res.status(400).json({ message: "did is required" })
-        if (typeof did != "string") return res.status(400).json({ message: "did must be an string" })
-
-        const existUser = await UserSchema.findOne({ h: handle, d: did });
-
-        if (existUser) {
-            existUser.ll = Date.now();
-            await existUser.save()
-            return res.json({ message: "updated" })
-        }
-
-        await UserSchema.create({ //salva os usuários que utilizam a extensão para futuras atualizações
-            h: handle,
-            d: did,
-            s: sessionID
-        })
-
-        return res.json({ message: "created" })
-    } catch (e) {
-        console.log(e)
-        res.status(500).json({ message: "Internal Server Error" })
-    }
-})
-
-app.get("/api/trendsmessages", async (req, res) => {
-    console.log(`${Date.now()} /api/trendsmessages`)
-    const settings = await SettingsSchema.findOne({});
-
-    return res.json(settings.trendsMessages)
-})
-
-app.get("/api/stats", async (req, res) => {
-    return res.json({
-        last30sonline: cache.stats.last30sSessionsCountStore
-    })
-})
-
-app.put("/api/admin/trendsmessages", async (req, res) => {
-    const tokenstring = req.headers.authorization;
-    if (!tokenstring) return res.status(401).json({ message: "Token is required" })
-
-    const token = await TokenSchema.findOne({ token: tokenstring });
-    if (!token) return res.status(401).json({ message: "Unauthorized" });
-
-    if(!token.permissions.includes("*")){
-        if (!token.permissions.includes("trendsmessages.manage")) return res.status(403).json({ message: "Missing permissions" });
-    }
-    const settings = await SettingsSchema.findOne({});
-
-    try {
-        const trendsmessages = JSON.parse(decodeURIComponent(req.query.trendsmessages));
-        settings.trendsMessages = trendsmessages;
-        await settings.save();
-        return res.json(settings.trendsMessages)
-
-    } catch (e) {
-        console.log(e)
-        res.status(500).json({ message: "Internal Server Error" })
-    }
-})
-
-app.get('*', function (req, res) {
-    res.status(404).send({ message: "Route not found" });
-});
-
-app.post('*', function (req, res) {
-    res.status(404).send({ message: "Route not found" });
-});
-
-app.listen(process.env.PORT, () => {
-    console.log(`Aplicativo iniciado em ${process.env.PORT}`)
-    updateCacheTrending()
-    updateCacheSettings()
-    // deleteOlds(3)
-})
