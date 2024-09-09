@@ -4,7 +4,7 @@ const { ComAtprotoSyncSubscribeRepos, SubscribeReposMessage, subscribeRepos } = 
 const mongoose = require("mongoose");
 
 // The database is divided into two: The one that stores the words of all posts and the one that stores information from BetterBluesky. If everyone goes to the same bank, it causes slowdowns.
-const database_words = mongoose.createConnection(process.env.MONGODB_WORDS); 
+const database_words = mongoose.createConnection(process.env.MONGODB_WORDS);
 const database = mongoose.createConnection(process.env.MONGODB);
 
 const express = require("express");
@@ -627,30 +627,34 @@ async function getTrending(hourlimit, recentlimit) {
 }
 
 async function getTrendingType(limit, type, time) {
-    const hoursAgo = new Date(Date.now() - time); // Data e hora de x horas atrás
+    try {
+        const hoursAgo = new Date(Date.now() - time); // Data e hora de x horas atrás
 
-    const result = await WordSchema.aggregate([
-        {
-            $match: {
-                ca: { $gte: hoursAgo }, // Filtra documentos criados nos últimos x horas
-                ty: type,
+        const result = await WordSchema.aggregate([
+            {
+                $match: {
+                    ca: { $gte: hoursAgo }, // Filtra documentos criados nos últimos x horas
+                    ty: type,
+                }
+            },
+            {
+                $group: {
+                    _id: "$t", // Agrupar por palavra
+                    count: { $sum: 1 } // Contar o número de ocorrências
+                }
+            },
+            {
+                $sort: { count: -1 } // Ordenar por contagem em ordem decrescente
+            },
+            {
+                $limit: (limit + 9) // Limitar o resultado para as palavra mais frequente
             }
-        },
-        {
-            $group: {
-                _id: "$t", // Agrupar por palavra
-                count: { $sum: 1 } // Contar o número de ocorrências
-            }
-        },
-        {
-            $sort: { count: -1 } // Ordenar por contagem em ordem decrescente
-        },
-        {
-            $limit: (limit + 9) // Limitar o resultado para as palavra mais frequente
-        }
-    ]);
+        ]);
 
-    return result.filter(obj => (!cache.settings.blacklist.trends.map(t => t.toLowerCase()).includes(obj._id.toLowerCase())) && (!cache.settings.blacklist.words.find(word => obj._id.toLowerCase().includes(word.toLowerCase())))).map(obj => { return { text: obj._id, count: obj.count, timefilter: time } }).slice(0, limit);
+        return result.filter(obj => (!cache.settings.blacklist.trends.map(t => t.toLowerCase()).includes(obj._id.toLowerCase())) && (!cache.settings.blacklist.words.find(word => obj._id.toLowerCase().includes(word.toLowerCase())))).map(obj => { return { text: obj._id, count: obj.count, timefilter: time } }).slice(0, limit);
+    }catch(e){
+        console.log(`getTrending`, e)
+    }
 }
 
 function removeDuplicatedTrends(trends) {
