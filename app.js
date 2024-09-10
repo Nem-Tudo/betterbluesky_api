@@ -659,7 +659,7 @@ function removeDuplicatedTrends(trends) {
     const wordMap = new Map();
 
     trends.forEach(({ text, count, timefilter }) => {
-        const lowerCaseText = text.toLowerCase();
+        const lowerCaseText = text.toLowerCase().normalize("NFD").replace(/\p{Diacritic}/gu, "");
 
         if (wordMap.has(lowerCaseText)) {
             wordMap.set(lowerCaseText, {
