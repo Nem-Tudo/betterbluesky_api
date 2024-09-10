@@ -551,8 +551,10 @@ app.get("/api/trendsmessages", async (req, res) => {
 })
 
 app.get("/api/stats", async (req, res) => {
+    const userscount = await UserSchema.countDocuments({});
     return res.json({
-        last30sonline: cache.stats.last30sSessionsCountStore
+        last30sonline: cache.stats.last30sSessionsCountStore,
+        userscount
     })
 })
 
