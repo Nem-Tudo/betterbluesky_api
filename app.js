@@ -148,26 +148,6 @@ const UserSchema = database.model("User", new mongoose.Schema({
     }
 }));
 
-const StatsSchema = database.model("Stats", new mongoose.Schema({
-    event: {
-        type: String,
-        required: true,
-    },
-    data: {
-        type: String,
-        required: true
-    },
-    sessionID: {
-        type: String,
-        required: true
-    },
-    createdAt: { //created at
-        type: Date,
-        immutable: true,
-        default: () => new Date()
-    }
-}));
-
 const SettingsSchema = database.model("Setting", new mongoose.Schema({
     blacklist: {
         trends: {
@@ -210,10 +190,6 @@ const SettingsSchema = database.model("Setting", new mongoose.Schema({
         }
     }],
     config: {
-        acceptableStats: {
-            type: Array,
-            default: []
-        }
     }
 }))
 
@@ -243,7 +219,6 @@ const cache = {
         },
         trendsMessages: [],
         config: {
-            acceptableStats: []
         }
     }
 }
@@ -473,35 +448,51 @@ app.get("/api/trends", (req, res) => {
     if (hasSendSomeTrending && (cache.trending.data.length === 0)) process.exit(1)
 })
 
-app.post("/api/stats", async (req, res) => {
-    const sessionID = req.query.sessionID;
-
-    if (!sessionID) return res.status(400).json({ message: "sessionID is required" })
-    if (typeof sessionID != "string") return res.status(400).json({ message: "sessionID must be an string" })
-
-
-    const event = req.query.action; //action because "event" cause an error
-
-    if (!event) return res.status(400).json({ message: "event is required" })
-    if (typeof event != "string") return res.status(400).json({ message: "event must be an string" })
-
-    if (!cache.settings.config.acceptableStats.includes(event)) return res.status(400).json({ message: "invalid event" })
-
-    const data = req.query.data;
-
-    if (!data) return res.status(400).json({ message: "data is required" })
-    if (typeof data != "string") return res.status(400).json({ message: "data must be an string" })
-
-    StatsSchema.create({
-        event: event,
-        data: data,
-        sessionID: sessionID
-    })
-
-    return res.json({ ok: true });
-})
+// redundância enquanto a extensão não atualiza para todos
 
 app.post("/api/stats/users", async (req, res) => {
+
+    try {
+        const sessionID = req.query.sessionID;
+
+        if (!sessionID) return res.status(400).json({ message: "sessionID is required" })
+        if (typeof sessionID != "string") return res.status(400).json({ message: "sessionID must be an string" })
+
+        const handle = req.query.handle;
+
+        if (!handle) return res.status(400).json({ message: "handle is required" })
+        if (typeof handle != "string") return res.status(400).json({ message: "handle must be an string" })
+
+        const did = req.query.did;
+
+        if (!did) return res.status(400).json({ message: "did is required" })
+        if (typeof did != "string") return res.status(400).json({ message: "did must be an string" })
+
+        const existUser = await UserSchema.findOne({ h: handle, d: did });
+
+        if (existUser) {
+            existUser.ll = Date.now();
+            existUser.s = sessionID;
+            existUser.ss.push(sessionID);
+            await existUser.save()
+            return res.json({ message: "updated" })
+        }
+
+        await UserSchema.create({ //salva os usuários que utilizam a extensão para futuras atualizações
+            h: handle,
+            d: did,
+            s: sessionID,
+            ss: [sessionID]
+        })
+
+        return res.json({ message: "created" })
+    } catch (e) {
+        console.log(e)
+        res.status(500).json({ message: "Internal Server Error" })
+    }
+})
+
+app.post("/api/users", async (req, res) => {
 
     try {
         const sessionID = req.query.sessionID;
