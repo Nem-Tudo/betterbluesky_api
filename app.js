@@ -569,6 +569,18 @@ app.get("/api/trends", (req, res) => {
 });
 
 app.get("/api/blacklist", async (req, res) => {
+	const tokenstring = req.headers.authorization;
+	if (!tokenstring)
+		return res.status(401).json({ message: "Token is required" });
+
+	const token = await TokenSchema.findOne({ token: tokenstring });
+	if (!token) return res.status(401).json({ message: "Unauthorized" });
+
+	if (!token.permissions.includes("*")) {
+		if (!token.permissions.includes("blacklist.manage"))
+			return res.status(403).json({ message: "Missing permissions" });
+	}
+
 	console.log(`${Date.now()} /api/blacklist`);
 	const settings = await SettingsSchema.findOne({});
 
