@@ -125,6 +125,44 @@ const PollVoteSchema = database.model(
 	}),
 );
 
+const BookmarkSchema = database.model(
+	"Bookmark",
+	new mongoose.Schema({
+		postaturi: {
+			type: String,
+			required: true,
+		},
+		userdid: {
+			type: String,
+			required: true,
+		},
+		postuserdid: {
+			type: String,
+			required: true
+		},
+		postid: {
+			type: String,
+			required: true
+		},
+		enabled: {
+			type: Boolean,
+			default: true
+		},
+		createdAt: {
+			//created at
+			type: Date,
+			immutable: true,
+			default: () => new Date(),
+		},
+	}).set("toObject", {
+		transform: (doc, ret, options) => {
+			delete ret._id;
+			delete ret.__v;
+			return ret;
+		},
+	}),
+);
+
 const TokenSchema = database.model(
 	"Token",
 	new mongoose.Schema({
@@ -557,6 +595,111 @@ app.post("/api/polls/:pollId/votes", async (req, res) => {
 
 	res.json(pollVote.toObject());
 });
+
+app.post("/api/bookmarks", async (req, res) => {
+	try {
+		const sessionID = req.query.sessionID;
+
+		if (!sessionID)
+			return res.status(400).json({ message: "sessionID is required" });
+		if (typeof sessionID !== "string")
+			return res.status(400).json({ message: "sessionID must be an string" });
+
+		const postid = decodeURIComponent(req.query.postid);
+
+		if (!postid) return res.status(400).json({ message: "postid is required" });
+		if (typeof postid !== "string") return res.status(400).json({ message: "postid must be an string" });
+
+		const postuserhandle = decodeURIComponent(req.query.postuserhandle);
+
+		if (!postuserhandle) return res.status(400).json({ message: "postuserhandle is required" });
+		if (typeof postuserhandle !== "string") return res.status(400).json({ message: "postuserhandle must be an string" });
+
+		const { did: postuserdid } = await fetch(`https://public.api.bsky.app/xrpc/com.atproto.identity.resolveHandle?handle=${postuserhandle}`).then(r => r.json())
+		const user = await UserSchema.findOne({ ss: sessionID });
+		if (!user) return res.status(403).json({ message: "Invalid SessionID" });
+
+		const existBookmark = await BookmarkSchema.findOne({ postid: postid, postuserdid: postuserdid, userdid: user.d });
+		if (existBookmark) {
+			existBookmark.enabled = true;
+			await existBookmark.save()
+			return res.json(existBookmark.toObject());
+		}
+
+		const bookmark = await BookmarkSchema.create({ postaturi: `at://${postuserdid}/app.bsky.feed.post/${postid}`, postid: postid, postuserdid: postuserdid, userdid: user.d });
+		return res.json(bookmark);
+	} catch (e) {
+		console.log(e);
+		res.status(500).json({ message: "Internal Server Error" })
+	}
+});
+
+app.delete("/api/bookmarks", async (req, res) => {
+	try {
+		const sessionID = req.query.sessionID;
+
+		if (!sessionID)
+			return res.status(400).json({ message: "sessionID is required" });
+		if (typeof sessionID !== "string")
+			return res.status(400).json({ message: "sessionID must be an string" });
+
+		const postid = decodeURIComponent(req.query.postid);
+
+		if (!postid) return res.status(400).json({ message: "postid is required" });
+		if (typeof postid !== "string") return res.status(400).json({ message: "postid must be an string" });
+
+		const user = await UserSchema.findOne({ ss: sessionID });
+		if (!user) return res.status(403).json({ message: "Invalid SessionID" });
+
+		await BookmarkSchema.findOneAndUpdate({ postid: postid, userdid: user.d }, { enabled: false });
+		return res.json({ success: true });
+	} catch (e) {
+		console.log(e);
+		res.status(500).json({ message: "Internal Server Error" })
+	}
+});
+
+app.get("/api/bookmarks", async (req, res) => {
+	const sessionID = req.query.sessionID;
+
+	if (!sessionID)
+		return res.status(400).json({ message: "sessionID is required" });
+	if (typeof sessionID !== "string")
+		return res.status(400).json({ message: "sessionID must be an string" });
+
+	const postid = decodeURIComponent(req.query.postid);
+
+	if (!postid) return res.status(400).json({ message: "postid is required" });
+	if (typeof postid !== "string") return res.status(400).json({ message: "postid must be an string" });
+
+	const user = await UserSchema.findOne({ ss: sessionID });
+	if (!user) return res.status(403).json({ message: "Invalid SessionID" });
+
+	const bookmark = await BookmarkSchema.exists({ postid: postid, userdid: user.d, enabled: true });
+	res.json({ exists: bookmark });
+});
+
+app.get("/api/users/:userdid/bookmarks", async (req, res) => {
+
+	const tokenstring = req.headers.authorization;
+	if (!tokenstring)
+		return res.status(401).json({ message: "Token is required" });
+
+	const token = await TokenSchema.findOne({ token: tokenstring });
+	if (!token) return res.status(401).json({ message: "Unauthorized" });
+
+	if (!token.permissions.includes("*")) {
+		if (!token.permissions.includes("bookmarks.view")) //used in feed integration
+			return res.status(403).json({ message: "Missing permissions" });
+	}
+
+	const user = await UserSchema.findOne({ d: req.params.userdid });
+	if (!user) return res.status(404).json({ message: "User not found" });
+
+	const bookmarks = await BookmarkSchema.find({ userdid: user.d, enabled: true });
+	res.json(bookmarks.map(bk => bk.postaturi));
+})
+
 
 app.get("/api/trends", (req, res) => {
 	res.json(cache.trending);
