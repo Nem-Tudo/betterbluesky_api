@@ -850,31 +850,36 @@ app.put("/api/admin/blacklist", async (req, res) => {
 // xrpc
 app.get("/xrpc/app.bsky.feed.getFeedSkeleton", async (req, res) => {
 
-	if (req.query.feed == "at://did:plc:xy3lxva6bqrph3avrvhzck7q/app.bsky.feed.generator/bookmarks") {
-		console.log(req.headers.authorization)
-		if (!req.headers.authorization) return res.status(401).json({ message: "Unauthorized" })
+	try{
+		if (req.query.feed == "at://did:plc:xy3lxva6bqrph3avrvhzck7q/app.bsky.feed.generator/bookmarks") {
+			if (!req.headers.authorization) return res.status(401).json({ message: "Unauthorized" })
+	
+			// const authorization = verifyJWT(req.headers.authorization.replace('Bearer ', '').trim(), process.env.FEED_KEY);
+	
+			//TEMP
+			const authorization = { error: false, data: JSON.parse(atob(req.headers.authorization.split(".")[1])) }
+			//---------------------
 
-		const authorization = verifyJWT(req.headers.authorization.replace('Bearer ', '').trim(), process.env.FEED_KEY);
-
-		console.log(authorization)
-
-		if (authorization.error) return res.status(401).json({ message: "Unauthorized" })
-
-		const user = await UserSchema.findOne({ d: authorization.data.iss });
-		if (!user) return res.status(404).json({ message: "User not found" });
-
-		const bookmarks = await BookmarkSchema.find({ userdid: user.d, enabled: true });
-
-
-		return res.json(
-			{
-				cursor: `${Date.now()}_${randomString(5, false)}`,
-				feed: bookmarks.map(uri => { return { post: uri } })
-			}
-		)
+			if (authorization.error) return res.status(401).json({ message: "Unauthorized" })
+	
+			const user = await UserSchema.findOne({ d: String(authorization.data.iss) });
+			if (!user) return res.status(404).json({ message: "User not found" });
+	
+			const bookmarks = await BookmarkSchema.find({ userdid: user.d, enabled: true });
+	
+	
+			return res.json(
+				{
+					cursor: `${Date.now()}_${randomString(5, false)}`,
+					feed: bookmarks.map(uri => { return { post: uri } })
+				}
+			)
+		}
+	
+		return res.status(404).json({ message: "Feed not found" });
+	}catch(e){
+		res.status(500).json({message: "Internal Server Error"})
 	}
-
-	return res.status(404).json({ message: "Feed not found" });
 
 })
 
@@ -924,7 +929,7 @@ app.listen(process.env.PORT, () => {
 
 function verifyJWT(token, key) {
 	try {
-		const decoded = jwt.verify(token, key, {algorithms: ["ES256K"]});
+		const decoded = jwt.verify(token, key, { algorithms: ["ES256K"] });
 		return {
 			error: false,
 			data: decoded
