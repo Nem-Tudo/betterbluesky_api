@@ -861,7 +861,7 @@ app.get("/xrpc/app.bsky.feed.describeFeedGenerator", (req, res) => {
 		"did": "did:web:betterbluesky.nemtudo.me",
 		"feeds": [
 			{
-				"uri": "at://plc:xy3lxva6bqrph3avrvhzck7q/app.bsky.feed/bookmarks",
+				"uri": "at://did:plc:xy3lxva6bqrph3avrvhzck7q/app.bsky.feed/bookmarks",
 				"title": "Itens Salvos",
 				"description": "Itens salvos da extensão BetterBluesky. Instale: https://nemtudo.me/betterbluesky",
 				"author": "nemtudo.me"
