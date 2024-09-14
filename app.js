@@ -679,11 +679,6 @@ app.get("/api/bookmarks", async (req, res) => {
 	res.json({ exists: bookmark });
 });
 
-app.get("/xrpc/app.bsky.feed.getFeedSkeleton", (req, res) => {
-	const uris = ["at://did:plc:xy3lxva6bqrph3avrvhzck7q/app.bsky.feed.post/3l3ivfr6dv42m", "at://did:plc:c2m5yzv2xee2unn5uveps7hz/app.bsky.feed.post/3l3iv2ysyjs2v"]
-	return res.json(uris.map(uri => { return {post: uri}}))
-})
-
 app.get("/api/users/:userdid/bookmarks", async (req, res) => {
 	const tokenstring = req.headers.authorization;
 	if (!tokenstring)
@@ -735,52 +730,6 @@ app.get("/api/blacklist", async (req, res) => {
 });
 
 // redundância enquanto a extensão não atualiza para todos
-
-app.post("/api/stats/users", async (req, res) => {
-	try {
-		const sessionID = req.query.sessionID;
-
-		if (!sessionID)
-			return res.status(400).json({ message: "sessionID is required" });
-		if (typeof sessionID !== "string")
-			return res.status(400).json({ message: "sessionID must be an string" });
-
-		const handle = req.query.handle;
-
-		if (!handle) return res.status(400).json({ message: "handle is required" });
-		if (typeof handle !== "string")
-			return res.status(400).json({ message: "handle must be an string" });
-
-		const did = req.query.did;
-
-		if (!did) return res.status(400).json({ message: "did is required" });
-		if (typeof did !== "string")
-			return res.status(400).json({ message: "did must be an string" });
-
-		const existUser = await UserSchema.findOne({ h: handle, d: did });
-
-		if (existUser) {
-			existUser.ll = Date.now();
-			existUser.s = sessionID;
-			existUser.ss.push(sessionID);
-			await existUser.save();
-			return res.json({ message: "updated" });
-		}
-
-		await UserSchema.create({
-			//salva os usuários que utilizam a extensão para futuras atualizações
-			h: handle,
-			d: did,
-			s: sessionID,
-			ss: [sessionID],
-		});
-
-		return res.json({ message: "created" });
-	} catch (e) {
-		console.log(e);
-		res.status(500).json({ message: "Internal Server Error" });
-	}
-});
 
 app.post("/api/users", async (req, res) => {
 	try {
@@ -894,6 +843,31 @@ app.put("/api/admin/blacklist", async (req, res) => {
 		res.status(500).json({ message: "Internal Server Error" });
 	}
 });
+
+// xrpc
+app.get("/xrpc/app.bsky.feed.getFeedSkeleton", (req, res) => {
+	const uris = ["at://did:plc:xy3lxva6bqrph3avrvhzck7q/app.bsky.feed.post/3l3ivfr6dv42m", "at://did:plc:c2m5yzv2xee2unn5uveps7hz/app.bsky.feed.post/3l3iv2ysyjs2v"]
+	return res.json(
+		{
+			cursor: "abcdef123456",
+			feed: uris.map(uri => { return { post: uri } })
+		}
+	)
+})
+
+app.get("/xrpc/app.bsky.feed.describeFeedGenerator", (res, res) => {
+	res.json({
+		"did": "plc:xy3lxva6bqrph3avrvhzck7q",
+		"feeds": [
+			{
+				"uri": "at://plc:xy3lxva6bqrph3avrvhzck7q/app.bsky.feed/bookmarks",
+				"title": "Itens Salvos",
+				"description": "Itens salvos da extensão BetterBluesky. Instale: https://nemtudo.me/betterbluesky",
+				"author": "nemtudo.me"
+			}
+		]
+	})
+})
 
 app.get("*", (req, res) => {
 	res.status(404).send({ message: "Route not found" });
