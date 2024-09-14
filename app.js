@@ -15,6 +15,8 @@ const express = require("express");
 const app = express();
 const cors = require("cors");
 
+const jwt = require("jsonwebtoken")
+
 app.use(
 	cors({
 		origin: "*",
@@ -680,7 +682,7 @@ app.get("/api/bookmarks", async (req, res) => {
 	res.json({ exists: bookmark });
 });
 
-app.get("	", async (req, res) => {
+app.get("/api/users/:userdid/bookmarks", async (req, res) => {
 	const tokenstring = req.headers.authorization;
 	if (!tokenstring)
 		return res.status(401).json({ message: "Token is required" });
@@ -697,7 +699,7 @@ app.get("	", async (req, res) => {
 	if (!user) return res.status(404).json({ message: "User not found" });
 
 	const bookmarks = await BookmarkSchema.find({ userdid: user.d, enabled: true });
-	res.json(bookmarks.map(bk => bk.postaturi));
+	res.json(bookmarks.map(bk => { return { post: bk.postaturi } }));
 })
 
 
@@ -846,12 +848,27 @@ app.put("/api/admin/blacklist", async (req, res) => {
 });
 
 // xrpc
-app.get("/xrpc/app.bsky.feed.getFeedSkeleton", (req, res) => {
-	const uris = ["at://did:plc:xy3lxva6bqrph3avrvhzck7q/app.bsky.feed.post/3l3ivfr6dv42m", "at://did:plc:c2m5yzv2xee2unn5uveps7hz/app.bsky.feed.post/3l3iv2ysyjs2v"]
+app.get("/xrpc/app.bsky.feed.getFeedSkeleton", async (req, res) => {
+	console.log(req, req.query, req.headers.authorization)
+
+	if(!req.headers.authorization) return res.status(401).json({message: "Unauthorized"})
+
+	const authorization = verifyJWT(req.headers.authorization, process.env.FEED_KEY);
+
+	console.log(authorization)
+
+	if(authorization.error) return res.status(401).json({message: "Unauthorized"})
+
+	const user = await UserSchema.findOne({ d: authorization.data.iss });
+	if (!user) return res.status(404).json({ message: "User not found" });
+
+	const bookmarks = await BookmarkSchema.find({ userdid: user.d, enabled: true });
+
+
 	return res.json(
 		{
-			cursor: "abcdef123456",
-			feed: uris.map(uri => { return { post: uri } })
+			cursor: `${Date.now()}_${randomString(5, false)}`,
+			feed: bookmarks.map(uri => { return { post: uri } })
 		}
 	)
 })
@@ -899,6 +916,22 @@ app.listen(process.env.PORT, () => {
 	updateCacheSettings();
 	// deleteOlds(3)
 });
+
+function verifyJWT(token, key) {
+	try {
+		const decoded = jwt.verify(token, key);
+		return {
+			error: false,
+			data: decoded
+		}
+	} catch (err) {
+		return {
+			error: true,
+			err: err
+		}
+	}
+
+}
 
 async function getTrending(hourlimit, recentlimit) {
 	const hourwords = await getTrendingType(hourlimit, "w", 1.5 * 60 * 60 * 1000);
