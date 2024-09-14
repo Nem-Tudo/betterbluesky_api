@@ -306,6 +306,7 @@ const cache = {
 const client = subscribeRepos("wss://bsky.network", { decodeRepoOps: true });
 
 client.on("message", (message) => {
+	return; //dev
 	if (ComAtprotoSyncSubscribeRepos.isCommit(message)) {
 		message.ops.forEach(async (op) => {
 			if (!op?.payload) return;
@@ -679,7 +680,7 @@ app.get("/api/bookmarks", async (req, res) => {
 	res.json({ exists: bookmark });
 });
 
-app.get("/api/users/:userdid/bookmarks", async (req, res) => {
+app.get("	", async (req, res) => {
 	const tokenstring = req.headers.authorization;
 	if (!tokenstring)
 		return res.status(401).json({ message: "Token is required" });
@@ -857,7 +858,7 @@ app.get("/xrpc/app.bsky.feed.getFeedSkeleton", (req, res) => {
 
 app.get("/xrpc/app.bsky.feed.describeFeedGenerator", (req, res) => {
 	res.json({
-		"did": "plc:xy3lxva6bqrph3avrvhzck7q",
+		"did": "did:web:betterbluesky.nemtudo.me",
 		"feeds": [
 			{
 				"uri": "at://plc:xy3lxva6bqrph3avrvhzck7q/app.bsky.feed/bookmarks",
