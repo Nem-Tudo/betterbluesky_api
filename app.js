@@ -923,7 +923,7 @@ app.listen(process.env.PORT, () => {
 
 function verifyJWT(token, key) {
 	try {
-		const decoded = jwt.verify(token, key);
+		const decoded = jwt.verify(token, key, {algorithms: ["ES256"]});
 		return {
 			error: false,
 			data: decoded
