@@ -869,6 +869,20 @@ app.get("/xrpc/app.bsky.feed.describeFeedGenerator", (req, res) => {
 	})
 })
 
+app.get("/.well-known/did.json", (req, res) => {
+	return res.json({
+		"@context": "https://www.w3.org/ns/did/v1",
+		"id": "did:web:betterbluesky.nemtudo.me",
+		"service": [
+		  {
+			"id": "did:web:betterbluesky.nemtudo.me#feed-service",
+			"type": "FeedGenerator",
+			"serviceEndpoint": "https://betterbluesky.nemtudo.me/xrpc"
+		  }
+		]
+	  })
+})
+
 app.get("*", (req, res) => {
 	res.status(404).send({ message: "Route not found" });
 });
