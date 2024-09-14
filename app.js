@@ -876,7 +876,6 @@ app.get("/.well-known/did.json", (req, res) => {
 		"id": "did:web:betterbluesky.nemtudo.me",
 		"service": [
 		  {
-			"id": "did:web:betterbluesky.nemtudo.me",
 			"type": "FeedGenerator",
 			"serviceEndpoint": "https://betterbluesky.nemtudo.me/xrpc"
 		  }
