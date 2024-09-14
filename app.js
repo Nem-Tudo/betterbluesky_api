@@ -872,15 +872,18 @@ app.get("/xrpc/app.bsky.feed.describeFeedGenerator", (req, res) => {
 
 app.get("/.well-known/did.json", (req, res) => {
 	return res.json({
-		"@context": "https://www.w3.org/ns/did/v1",
+		"@context": [
+			"https://www.w3.org/ns/did/v1"
+		],
 		"id": "did:web:betterbluesky.nemtudo.me",
 		"service": [
-		  {
-			"type": "FeedGenerator",
-			"serviceEndpoint": "https://betterbluesky.nemtudo.me/xrpc"
-		  }
+			{
+				"id": "#bsky_fg",
+				"type": "BskyFeedGenerator",
+				"serviceEndpoint": "https://betterbluesky.nemtudo.me"
+			}
 		]
-	  })
+	})
 })
 
 app.get("*", (req, res) => {
