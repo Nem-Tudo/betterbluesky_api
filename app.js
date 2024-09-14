@@ -855,7 +855,7 @@ app.get("/xrpc/app.bsky.feed.getFeedSkeleton", (req, res) => {
 	)
 })
 
-app.get("/xrpc/app.bsky.feed.describeFeedGenerator", (res, res) => {
+app.get("/xrpc/app.bsky.feed.describeFeedGenerator", (req, res) => {
 	res.json({
 		"did": "plc:xy3lxva6bqrph3avrvhzck7q",
 		"feeds": [
