@@ -851,6 +851,7 @@ app.put("/api/admin/blacklist", async (req, res) => {
 app.get("/xrpc/app.bsky.feed.getFeedSkeleton", async (req, res) => {
 
 	if (req.query.feed == "at://did:plc:xy3lxva6bqrph3avrvhzck7q/app.bsky.feed.generator/bookmarks") {
+		console.log(req.headers.authorization)
 		if (!req.headers.authorization) return res.status(401).json({ message: "Unauthorized" })
 
 		const authorization = verifyJWT(req.headers.authorization.replace('Bearer ', '').trim(), process.env.FEED_KEY);
