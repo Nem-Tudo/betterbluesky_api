@@ -679,8 +679,12 @@ app.get("/api/bookmarks", async (req, res) => {
 	res.json({ exists: bookmark });
 });
 
-app.get("/api/users/:userdid/bookmarks", async (req, res) => {
+app.get("/xrpc/app.bsky.feed.getFeedSkeleton", (req, res) => {
+	const uris = ["at://did:plc:xy3lxva6bqrph3avrvhzck7q/app.bsky.feed.post/3l3ivfr6dv42m", "at://did:plc:c2m5yzv2xee2unn5uveps7hz/app.bsky.feed.post/3l3iv2ysyjs2v"]
+	return res.json(uris.map(uri => { return {post: uri}}))
+})
 
+app.get("/api/users/:userdid/bookmarks", async (req, res) => {
 	const tokenstring = req.headers.authorization;
 	if (!tokenstring)
 		return res.status(401).json({ message: "Token is required" });
