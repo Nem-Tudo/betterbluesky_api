@@ -1031,14 +1031,12 @@ app.get("/xrpc/app.bsky.feed.getFeedSkeleton", async (req, res) => {
 				enabled: true,
 			});
 
-			const settings = await SettingsSchema.findOne({});
-
 			if (bookmarks.length === 0) {
 				return res.json({
 					cursor: `${Date.now()}_${randomString(5, false)}`,
 					feed: [
 						{
-							post: settings.config.defaultBookmarksPost,
+							post: cache.settings.config.defaultBookmarksPost,
 						},
 					], //No bookmarks post
 				});
