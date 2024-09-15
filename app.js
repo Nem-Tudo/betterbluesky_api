@@ -1034,9 +1034,9 @@ app.get("/xrpc/app.bsky.feed.getFeedSkeleton", async (req, res) => {
 					cursor: `${Date.now()}_${randomString(5, false)}`,
 					feed: [
 						{
-							post: "at://did:plc:xy3lxva6bqrph3avrvhzck7q/app.bsky.feed.post/3l45rnoev4q2d",
+							post: "at://did:plc:xy3lxva6bqrph3avrvhzck7q/app.bsky.feed.post/3l47owv23wn2t",
 						},
-					], //No bookmarks post: https://bsky.app/profile/nemtudo.me/post/3l45rnoev4q2d
+					], //No bookmarks post: https://bsky.app/profile/nemtudo.me/post/3l47owv23wn2t
 				});
 			}
 
