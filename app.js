@@ -848,7 +848,7 @@ app.put("/api/admin/blacklist", async (req, res) => {
 
 // xrpc
 app.get("/xrpc/app.bsky.feed.getFeedSkeleton", async (req, res) => {
-
+	console.log("[Feed]", req.query)
 	try {
 		if (req.query.feed == "at://did:plc:xy3lxva6bqrph3avrvhzck7q/app.bsky.feed.generator/bookmarks") {
 			if (!req.headers.authorization) return res.status(401).json({ message: "Unauthorized" })
@@ -870,7 +870,7 @@ app.get("/xrpc/app.bsky.feed.getFeedSkeleton", async (req, res) => {
 				return res.json(
 					{
 						cursor: `${Date.now()}_${randomString(5, false)}`,
-						feed: [{ post: "at://did:plc:xy3lxva6bqrph3avrvhzck7q/app.bsky.feed.post/3l45rnoev4q2d" }]
+						feed: [{ post: "at://did:plc:xy3lxva6bqrph3avrvhzck7q/app.bsky.feed.post/3l45rnoev4q2d" }] //No bookmarks post: https://bsky.app/profile/nemtudo.me/post/3l45rnoev4q2d
 					}
 				)
 			}
@@ -879,7 +879,7 @@ app.get("/xrpc/app.bsky.feed.getFeedSkeleton", async (req, res) => {
 			return res.json(
 				{
 					cursor: `${Date.now()}_${randomString(5, false)}`,
-					feed: bookmarks.map(bookmark => { return { post: bookmark.postaturi } })
+					feed: bookmarks.map(bookmark => { return { post: bookmark.postaturi } }).reverse()
 				}
 			)
 		}
