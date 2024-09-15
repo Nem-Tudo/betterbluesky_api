@@ -308,7 +308,6 @@ const cache = {
 const client = subscribeRepos("wss://bsky.network", { decodeRepoOps: true });
 
 client.on("message", (message) => {
-	return; //dev
 	if (ComAtprotoSyncSubscribeRepos.isCommit(message)) {
 		message.ops.forEach(async (op) => {
 			if (!op?.payload) return;
