@@ -849,24 +849,33 @@ app.put("/api/admin/blacklist", async (req, res) => {
 // xrpc
 app.get("/xrpc/app.bsky.feed.getFeedSkeleton", async (req, res) => {
 
-	try{
+	try {
 		if (req.query.feed == "at://did:plc:xy3lxva6bqrph3avrvhzck7q/app.bsky.feed.generator/bookmarks") {
 			if (!req.headers.authorization) return res.status(401).json({ message: "Unauthorized" })
-	
+
 			// const authorization = verifyJWT(req.headers.authorization.replace('Bearer ', '').trim(), process.env.FEED_KEY);
-	
+
 			//TEMP
 			const authorization = { error: false, data: JSON.parse(atob(req.headers.authorization.split(".")[1])) }
 			//---------------------
 
 			if (authorization.error) return res.status(401).json({ message: "Unauthorized" })
-	
+
 			const user = await UserSchema.findOne({ d: String(authorization.data.iss) });
 			if (!user) return res.status(404).json({ message: "User not found" });
-	
+
 			const bookmarks = await BookmarkSchema.find({ userdid: user.d, enabled: true });
-	
-	
+
+			if (bookmarks.length === 0) {
+				return res.json(
+					{
+						cursor: `${Date.now()}_${randomString(5, false)}`,
+						feed: [{ post: "at://did:plc:xy3lxva6bqrph3avrvhzck7q/app.bsky.feed.post/3l45rnoev4q2d" }]
+					}
+				)
+			}
+
+
 			return res.json(
 				{
 					cursor: `${Date.now()}_${randomString(5, false)}`,
@@ -874,10 +883,10 @@ app.get("/xrpc/app.bsky.feed.getFeedSkeleton", async (req, res) => {
 				}
 			)
 		}
-	
+
 		return res.status(404).json({ message: "Feed not found" });
-	}catch(e){
-		res.status(500).json({message: "Internal Server Error"})
+	} catch (e) {
+		res.status(500).json({ message: "Internal Server Error" })
 	}
 
 })
