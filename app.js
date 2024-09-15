@@ -871,7 +871,7 @@ app.get("/xrpc/app.bsky.feed.getFeedSkeleton", async (req, res) => {
 			return res.json(
 				{
 					cursor: `${Date.now()}_${randomString(5, false)}`,
-					feed: bookmarks.map(uri => { return { post: uri } })
+					feed: bookmarks.map(bookmark => { return { post: bookmark.postaturi } })
 				}
 			)
 		}
