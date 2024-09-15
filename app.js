@@ -39,7 +39,7 @@ const WordSchema = database_words.model(
 		l: {
 			//languages
 			type: String,
-			required: true,
+			default: ""
 		},
 		ca: {
 			//created at
@@ -277,12 +277,50 @@ const SettingsSchema = database.model(
 );
 
 const cache = {
+	_firstUpdated: false,
 	trending: {
-		head: {
-			time: 0,
-			length: 0,
+		pt: {
+			head: {
+				time: 0,
+				length: 0,
+			},
+			data: []
 		},
-		data: [],
+		en: {
+			head: {
+				time: 0,
+				length: 0,
+			},
+			data: []
+		},
+		ja: {
+			head: {
+				time: 0,
+				length: 0,
+			},
+			data: []
+		},
+		es: {
+			head: {
+				time: 0,
+				length: 0,
+			},
+			data: []
+		},
+		fr: {
+			head: {
+				time: 0,
+				length: 0,
+			},
+			data: []
+		},
+		global: {
+			head: {
+				time: 0,
+				length: 0,
+			},
+			data: []
+		}
 	},
 	stats: {
 		last30sSessions: new Map(),
@@ -308,11 +346,12 @@ const cache = {
 const client = subscribeRepos("wss://bsky.network", { decodeRepoOps: true });
 
 client.on("message", (message) => {
+	if (!cache._firstUpdated) return;
 	if (ComAtprotoSyncSubscribeRepos.isCommit(message)) {
 		message.ops.forEach(async (op) => {
 			if (!op?.payload) return;
 			if (op.payload["$type"] !== "app.bsky.feed.post") return;
-			if (!op.payload.langs?.includes("pt")) return; //apenas em portugues
+			if (!op.payload.langs) return
 
 			const text = op.payload.text.trim();
 
@@ -384,20 +423,43 @@ async function updateCacheSettings() {
 	cache.settings.trendsMessages = settings.trendsMessages;
 }
 
+updateCacheTrending()
 async function updateCacheTrending() {
-	cache.trending.data = await getTrending(15, 6);
-	cache.trending.head.time = Date.now();
-	cache.trending.head.length = cache.trending.data.length;
+	cache.trending.pt.data = await getTrending(15, 6, ["pt"]);
+	cache.trending.pt.head.time = Date.now();
+	cache.trending.pt.head.length = cache.trending.pt.data.length;
+
+	cache.trending.en.data = await getTrending(15, 6, ["en", "en-US"]); //en or en-us
+	cache.trending.en.head.time = Date.now();
+	cache.trending.en.head.length = cache.trending.en.data.length;
+
+	cache.trending.ja.data = await getTrending(15, 6, ["ja"]);
+	cache.trending.ja.head.time = Date.now();
+	cache.trending.ja.head.length = cache.trending.ja.data.length;
+
+	cache.trending.es.data = await getTrending(15, 6, ["es"]);
+	cache.trending.es.head.time = Date.now();
+	cache.trending.es.head.length = cache.trending.es.data.length;
+
+	cache.trending.fr.data = await getTrending(15, 6, ["fr"]);
+	cache.trending.fr.head.time = Date.now();
+	cache.trending.fr.head.length = cache.trending.fr.data.length;
+
+	cache.trending.global.data = await getTrending(15, 6, []);
+	cache.trending.global.head.time = Date.now();
+	cache.trending.global.head.length = cache.trending.global.data.length;
+
 	console.log(
 		`=============================== Cache atualizado (${Date.now()}) ===============================`,
 	);
-	console.log(cache.trending);
-}
+	cache._firstUpdated = true;
 
-setInterval(async () => {
-	await updateCacheSettings();
-	updateCacheTrending();
-}, 29 * 1000);
+	setTimeout(async () => {
+		await updateCacheSettings();
+		updateCacheTrending();
+	}, 29 * 1000);
+
+}
 
 setTimeout(
 	() => {
@@ -436,8 +498,6 @@ function getHashtags(texto) {
 	const regex = /#([\wÀ-ÖØ-öø-ÿ]+)/g;
 	return texto.match(regex) || [];
 }
-
-let hasSendSomeTrending = false;
 
 app.post("/api/polls", async (req, res) => {
 	const sessionID = req.query.sessionID;
@@ -701,15 +761,30 @@ app.get("/api/users/:userdid/bookmarks", async (req, res) => {
 	res.json(bookmarks.map(bk => { return { post: bk.postaturi } }));
 })
 
+let hasSendSomeTrending = false;
 
 app.get("/api/trends", (req, res) => {
-	res.json(cache.trending);
+
+	let language = req.query.lang;
+
+	//while the extension is not updated for everyone
+	// if (!language) return res.status(400).json({ message: "lang query is required (pt, en, ja, es, fr, global, all)" })
+	if(!language) language = "pt";
+
+	if (!["pt", "en", "ja", "es", "fr", "global", "all"].includes(language)) return res.status(400).json({ message: "lang query must be 'pt', 'en', 'ja', 'es', 'fr', 'global', 'all'" })
+
+	if (language === "all") {
+		res.json(cache.trending);
+	} else {
+		res.json(cache.trending[language]);
+	}
+
 	if (req.query.sessionID)
-		cache.stats.last30sSessions.set(req.query.sessionID, req.query.updateCount);
+		cache.stats.last30sSessions.set(req.query.sessionID, language);
 
 	//Gambiarra gigante para reinciar o app quando houver o erro misterioso de começar a retornar array vazia nos trends (Me ajude e achar!)
-	if (cache.trending.data.length > 0) hasSendSomeTrending = true;
-	if (hasSendSomeTrending && cache.trending.data.length === 0) process.exit(1);
+	if (cache.trending.pt.data.length > 0) hasSendSomeTrending = true;
+	if (hasSendSomeTrending && cache.trending.pt.data.length === 0) process.exit(1);
 });
 
 app.get("/api/blacklist", async (req, res) => {
@@ -959,16 +1034,17 @@ function verifyJWT(token, key) {
 
 }
 
-async function getTrending(hourlimit, recentlimit) {
-	const hourwords = await getTrendingType(hourlimit, "w", 1.5 * 60 * 60 * 1000);
+async function getTrending(hourlimit, recentlimit, languages) {
+	const hourwords = await getTrendingType(hourlimit, "w", 1.5 * 60 * 60 * 1000, languages);
 	const hourhashtags = await getTrendingType(
 		hourlimit,
 		"h",
 		1.5 * 60 * 60 * 1000,
+		languages
 	);
 
-	const recentwords = await getTrendingType(10, "w", 10 * 60 * 1000);
-	const recenthashtags = await getTrendingType(10, "h", 10 * 60 * 1000);
+	const recentwords = await getTrendingType(10, "w", 10 * 60 * 1000, languages);
+	const recenthashtags = await getTrendingType(10, "h", 10 * 60 * 1000, languages);
 
 	const _hourtrends = mergeArray(hourhashtags, hourwords);
 	const _recenttrends = mergeArray(recenthashtags, recentwords);
@@ -1010,7 +1086,7 @@ async function getTrending(hourlimit, recentlimit) {
 	return trends;
 }
 
-async function getTrendingType(limit, type, time) {
+async function getTrendingType(limit, type, time, languages = []) {
 	try {
 		const hoursAgo = new Date(Date.now() - time); // Data e hora de x horas atrás
 
@@ -1018,7 +1094,8 @@ async function getTrendingType(limit, type, time) {
 			{
 				$match: {
 					ca: { $gte: hoursAgo }, // Filtra documentos criados nos últimos x horas
-					ty: type,
+					ty: type, //apenas do tipo
+					l: (languages.length > 0) ? { $in: languages } : { $exists: true } //l inclui algum da array languages ou global
 				},
 			},
 			{
