@@ -352,7 +352,6 @@ const cache = {
 const client = subscribeRepos("wss://bsky.network", { decodeRepoOps: true });
 
 client.on("message", (message) => {
-	if (!cache._firstUpdated) return;
 	if (ComAtprotoSyncSubscribeRepos.isCommit(message)) {
 		message.ops.forEach(async (op) => {
 			if (!op?.payload) return;
@@ -361,6 +360,31 @@ client.on("message", (message) => {
 
 			const text = op.payload.text.trim();
 
+			if (op.payload.reply) {
+				if (text === "📍") {
+					try{
+						const user = await UserSchema.findOne({ d: message.repo });
+						if (!user) return;
+	
+						const replypostaturi = op.payload.reply.parent.uri;
+						const replydata = extractPostIdAndDid(replypostaturi);
+	
+						if(replydata.error) return;
+	
+						const existBookmark = await BookmarkSchema.findOne({ postid: replydata.data.postid, postuserdid: replydata.data.did, userdid: user.d });
+						if (existBookmark) {
+							existBookmark.enabled = true;
+							return await existBookmark.save()
+						}
+	
+						return BookmarkSchema.create({ postaturi: replypostaturi, postid: replydata.data.postid, postuserdid: replydata.data.did, userdid: user.d });
+					}catch(e){
+						console.log(`Error on message bookmark`, e)
+					}
+				}
+			}
+
+			if (!cache._firstUpdated) return;
 			const posthashtags = getHashtags(text);
 			const postwords = [
 				...new Set(
@@ -775,7 +799,7 @@ app.get("/api/trends", (req, res) => {
 
 	//while the extension is not updated for everyone
 	// if (!language) return res.status(400).json({ message: "lang query is required (pt, en, ja, es, fr, global, all)" })
-	if(!language) language = "pt";
+	if (!language) language = "pt";
 
 	if (!["pt", "en", "ja", "es", "fr", "global", "all"].includes(language)) return res.status(400).json({ message: "lang query must be 'pt', 'en', 'ja', 'es', 'fr', 'global', 'all'" })
 
@@ -1188,4 +1212,23 @@ function randomString(length, uppercases = true) {
 		counter += 1;
 	}
 	return result;
+}
+
+function extractPostIdAndDid(uri) {
+	const regex = /^at:\/\/did:(plc:[\w\d]+)\/app\.bsky\.feed\.post\/([\w\d]+)/;
+	const match = uri.match(regex);
+
+	if (match) {
+		return {
+			error: false,
+			data: {
+				did: match[1],
+				postid: match[2]
+			}
+		};
+	} else {
+		return {
+			error: true
+		}
+	}
 }
