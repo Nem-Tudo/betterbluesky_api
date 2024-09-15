@@ -272,7 +272,9 @@ const SettingsSchema = database.model(
 				},
 			},
 		],
-		config: {},
+		config: {
+			defaultBookmarksPost: String,
+		},
 	}),
 );
 
@@ -1029,14 +1031,16 @@ app.get("/xrpc/app.bsky.feed.getFeedSkeleton", async (req, res) => {
 				enabled: true,
 			});
 
+			const settings = await SettingsSchema.findOne({});
+
 			if (bookmarks.length === 0) {
 				return res.json({
 					cursor: `${Date.now()}_${randomString(5, false)}`,
 					feed: [
 						{
-							post: "at://did:plc:xy3lxva6bqrph3avrvhzck7q/app.bsky.feed.post/3l47q3i4wle2h",
+							post: settings.config.defaultBookmarksPost,
 						},
-					], //No bookmarks post: https://bsky.app/profile/nemtudo.me/post/3l47q3i4wle2h
+					], //No bookmarks post
 				});
 			}
 
