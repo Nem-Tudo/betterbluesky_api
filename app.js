@@ -15,7 +15,7 @@ const express = require("express");
 const app = express();
 const cors = require("cors");
 
-const jwt = require("jsonwebtoken")
+const jwt = require("jsonwebtoken");
 
 app.use(
 	cors({
@@ -39,7 +39,7 @@ const WordSchema = database_words.model(
 		l: {
 			//languages
 			type: String,
-			default: ""
+			default: "",
 		},
 		ca: {
 			//created at
@@ -140,15 +140,15 @@ const BookmarkSchema = database.model(
 		},
 		postuserdid: {
 			type: String,
-			required: true
+			required: true,
 		},
 		postid: {
 			type: String,
-			required: true
+			required: true,
 		},
 		enabled: {
 			type: Boolean,
-			default: true
+			default: true,
 		},
 		createdAt: {
 			//created at
@@ -285,7 +285,7 @@ const cache = {
 				time: 0,
 				length: 0,
 			},
-			data: []
+			data: [],
 		},
 		en: {
 			head: {
@@ -293,7 +293,7 @@ const cache = {
 				time: 0,
 				length: 0,
 			},
-			data: []
+			data: [],
 		},
 		ja: {
 			head: {
@@ -301,7 +301,7 @@ const cache = {
 				time: 0,
 				length: 0,
 			},
-			data: []
+			data: [],
 		},
 		es: {
 			head: {
@@ -309,7 +309,7 @@ const cache = {
 				time: 0,
 				length: 0,
 			},
-			data: []
+			data: [],
 		},
 		fr: {
 			head: {
@@ -317,7 +317,7 @@ const cache = {
 				time: 0,
 				length: 0,
 			},
-			data: []
+			data: [],
 		},
 		global: {
 			head: {
@@ -325,8 +325,8 @@ const cache = {
 				time: 0,
 				length: 0,
 			},
-			data: []
-		}
+			data: [],
+		},
 	},
 	stats: {
 		last30sSessions: new Map(),
@@ -355,31 +355,40 @@ client.on("message", (message) => {
 	if (ComAtprotoSyncSubscribeRepos.isCommit(message)) {
 		message.ops.forEach(async (op) => {
 			if (!op?.payload) return;
-			if (op.payload["$type"] !== "app.bsky.feed.post") return;
-			if (!op.payload.langs) return
+			if (op.payload.$type !== "app.bsky.feed.post") return;
+			if (!op.payload.langs) return;
 
 			const text = op.payload.text.trim();
 
 			if (op.payload.reply) {
 				if (text === "📍") {
-					try{
+					try {
 						const user = await UserSchema.findOne({ d: message.repo });
 						if (!user) return;
-	
+
 						const replypostaturi = op.payload.reply.parent.uri;
 						const replydata = extractPostIdAndDid(replypostaturi);
-	
-						if(replydata.error) return;
-	
-						const existBookmark = await BookmarkSchema.findOne({ postid: replydata.data.postid, postuserdid: replydata.data.did, userdid: user.d });
+
+						if (replydata.error) return;
+
+						const existBookmark = await BookmarkSchema.findOne({
+							postid: replydata.data.postid,
+							postuserdid: replydata.data.did,
+							userdid: user.d,
+						});
 						if (existBookmark) {
 							existBookmark.enabled = true;
-							return await existBookmark.save()
+							return await existBookmark.save();
 						}
-	
-						return BookmarkSchema.create({ postaturi: replypostaturi, postid: replydata.data.postid, postuserdid: replydata.data.did, userdid: user.d });
-					}catch(e){
-						console.log(`Error on message bookmark`, e)
+
+						return BookmarkSchema.create({
+							postaturi: replypostaturi,
+							postid: replydata.data.postid,
+							postuserdid: replydata.data.did,
+							userdid: user.d,
+						});
+					} catch (e) {
+						console.log("Error on message bookmark", e);
 					}
 				}
 			}
@@ -453,7 +462,7 @@ async function updateCacheSettings() {
 	cache.settings.trendsMessages = settings.trendsMessages;
 }
 
-updateCacheTrending()
+updateCacheTrending();
 async function updateCacheTrending() {
 	cache.trending.pt.data = await getTrending(15, 6, ["pt"]);
 	cache.trending.pt.head.time = Date.now();
@@ -488,7 +497,6 @@ async function updateCacheTrending() {
 		await updateCacheSettings();
 		updateCacheTrending();
 	}, 29 * 1000);
-
 }
 
 setTimeout(
@@ -700,29 +708,45 @@ app.post("/api/bookmarks", async (req, res) => {
 		const postid = decodeURIComponent(req.query.postid);
 
 		if (!postid) return res.status(400).json({ message: "postid is required" });
-		if (typeof postid !== "string") return res.status(400).json({ message: "postid must be an string" });
+		if (typeof postid !== "string")
+			return res.status(400).json({ message: "postid must be an string" });
 
 		const postuserhandle = decodeURIComponent(req.query.postuserhandle);
 
-		if (!postuserhandle) return res.status(400).json({ message: "postuserhandle is required" });
-		if (typeof postuserhandle !== "string") return res.status(400).json({ message: "postuserhandle must be an string" });
+		if (!postuserhandle)
+			return res.status(400).json({ message: "postuserhandle is required" });
+		if (typeof postuserhandle !== "string")
+			return res
+				.status(400)
+				.json({ message: "postuserhandle must be an string" });
 
-		const { did: postuserdid } = await fetch(`https://public.api.bsky.app/xrpc/com.atproto.identity.resolveHandle?handle=${postuserhandle}`).then(r => r.json())
+		const { did: postuserdid } = await fetch(
+			`https://public.api.bsky.app/xrpc/com.atproto.identity.resolveHandle?handle=${postuserhandle}`,
+		).then((r) => r.json());
 		const user = await UserSchema.findOne({ ss: sessionID });
 		if (!user) return res.status(403).json({ message: "Invalid SessionID" });
 
-		const existBookmark = await BookmarkSchema.findOne({ postid: postid, postuserdid: postuserdid, userdid: user.d });
+		const existBookmark = await BookmarkSchema.findOne({
+			postid: postid,
+			postuserdid: postuserdid,
+			userdid: user.d,
+		});
 		if (existBookmark) {
 			existBookmark.enabled = true;
-			await existBookmark.save()
+			await existBookmark.save();
 			return res.json(existBookmark.toObject());
 		}
 
-		const bookmark = await BookmarkSchema.create({ postaturi: `at://${postuserdid}/app.bsky.feed.post/${postid}`, postid: postid, postuserdid: postuserdid, userdid: user.d });
+		const bookmark = await BookmarkSchema.create({
+			postaturi: `at://${postuserdid}/app.bsky.feed.post/${postid}`,
+			postid: postid,
+			postuserdid: postuserdid,
+			userdid: user.d,
+		});
 		return res.json(bookmark);
 	} catch (e) {
 		console.log(e);
-		res.status(500).json({ message: "Internal Server Error" })
+		res.status(500).json({ message: "Internal Server Error" });
 	}
 });
 
@@ -738,16 +762,20 @@ app.delete("/api/bookmarks", async (req, res) => {
 		const postid = decodeURIComponent(req.query.postid);
 
 		if (!postid) return res.status(400).json({ message: "postid is required" });
-		if (typeof postid !== "string") return res.status(400).json({ message: "postid must be an string" });
+		if (typeof postid !== "string")
+			return res.status(400).json({ message: "postid must be an string" });
 
 		const user = await UserSchema.findOne({ ss: sessionID });
 		if (!user) return res.status(403).json({ message: "Invalid SessionID" });
 
-		await BookmarkSchema.findOneAndUpdate({ postid: postid, userdid: user.d }, { enabled: false });
+		await BookmarkSchema.findOneAndUpdate(
+			{ postid: postid, userdid: user.d },
+			{ enabled: false },
+		);
 		return res.json({ success: true });
 	} catch (e) {
 		console.log(e);
-		res.status(500).json({ message: "Internal Server Error" })
+		res.status(500).json({ message: "Internal Server Error" });
 	}
 });
 
@@ -762,12 +790,17 @@ app.get("/api/bookmarks", async (req, res) => {
 	const postid = decodeURIComponent(req.query.postid);
 
 	if (!postid) return res.status(400).json({ message: "postid is required" });
-	if (typeof postid !== "string") return res.status(400).json({ message: "postid must be an string" });
+	if (typeof postid !== "string")
+		return res.status(400).json({ message: "postid must be an string" });
 
 	const user = await UserSchema.findOne({ ss: sessionID });
 	if (!user) return res.status(403).json({ message: "Invalid SessionID" });
 
-	const bookmark = await BookmarkSchema.exists({ postid: postid, userdid: user.d, enabled: true });
+	const bookmark = await BookmarkSchema.exists({
+		postid: postid,
+		userdid: user.d,
+		enabled: true,
+	});
 	res.json({ exists: bookmark });
 });
 
@@ -780,28 +813,39 @@ app.get("/api/users/:userdid/bookmarks", async (req, res) => {
 	if (!token) return res.status(401).json({ message: "Unauthorized" });
 
 	if (!token.permissions.includes("*")) {
-		if (!token.permissions.includes("bookmarks.view")) //used in feed integration
+		if (!token.permissions.includes("bookmarks.view"))
+			//used in feed integration
 			return res.status(403).json({ message: "Missing permissions" });
 	}
 
 	const user = await UserSchema.findOne({ d: req.params.userdid });
 	if (!user) return res.status(404).json({ message: "User not found" });
 
-	const bookmarks = await BookmarkSchema.find({ userdid: user.d, enabled: true });
-	res.json(bookmarks.map(bk => { return { post: bk.postaturi } }));
-})
+	const bookmarks = await BookmarkSchema.find({
+		userdid: user.d,
+		enabled: true,
+	});
+	res.json(
+		bookmarks.map((bk) => {
+			return { post: bk.postaturi };
+		}),
+	);
+});
 
 let hasSendSomeTrending = false;
 
 app.get("/api/trends", (req, res) => {
-
 	let language = req.query.lang;
 
 	//while the extension is not updated for everyone
 	// if (!language) return res.status(400).json({ message: "lang query is required (pt, en, ja, es, fr, global, all)" })
 	if (!language) language = "pt";
 
-	if (!["pt", "en", "ja", "es", "fr", "global", "all"].includes(language)) return res.status(400).json({ message: "lang query must be 'pt', 'en', 'ja', 'es', 'fr', 'global', 'all'" })
+	if (!["pt", "en", "ja", "es", "fr", "global", "all"].includes(language))
+		return res.status(400).json({
+			message:
+				"lang query must be 'pt', 'en', 'ja', 'es', 'fr', 'global', 'all'",
+		});
 
 	if (language === "all") {
 		res.json(cache.trending);
@@ -814,7 +858,8 @@ app.get("/api/trends", (req, res) => {
 
 	//Gambiarra gigante para reinciar o app quando houver o erro misterioso de começar a retornar array vazia nos trends (Me ajude e achar!)
 	if (cache.trending.pt.data.length > 0) hasSendSomeTrending = true;
-	if (hasSendSomeTrending && cache.trending.pt.data.length === 0) process.exit(1);
+	if (hasSendSomeTrending && cache.trending.pt.data.length === 0)
+		process.exit(1);
 });
 
 app.get("/api/blacklist", async (req, res) => {
@@ -953,84 +998,97 @@ app.put("/api/admin/blacklist", async (req, res) => {
 
 // xrpc
 app.get("/xrpc/app.bsky.feed.getFeedSkeleton", async (req, res) => {
-	console.log("[Feed]", req.query)
+	console.log("[Feed]", req.query);
 	try {
-		if (req.query.feed == "at://did:plc:xy3lxva6bqrph3avrvhzck7q/app.bsky.feed.generator/bookmarks") {
-			if (!req.headers.authorization) return res.status(401).json({ message: "Unauthorized" })
+		if (
+			req.query.feed ===
+			"at://did:plc:xy3lxva6bqrph3avrvhzck7q/app.bsky.feed.generator/bookmarks"
+		) {
+			if (!req.headers.authorization)
+				return res.status(401).json({ message: "Unauthorized" });
 
 			// const authorization = verifyJWT(req.headers.authorization.replace('Bearer ', '').trim(), process.env.FEED_KEY);
 
 			//TEMP
-			const authorization = { error: false, data: JSON.parse(atob(req.headers.authorization.split(".")[1])) }
+			const authorization = {
+				error: false,
+				data: JSON.parse(atob(req.headers.authorization.split(".")[1])),
+			};
 			//---------------------
 
-			if (authorization.error) return res.status(401).json({ message: "Unauthorized" })
+			if (authorization.error)
+				return res.status(401).json({ message: "Unauthorized" });
 
-			const user = await UserSchema.findOne({ d: String(authorization.data.iss) });
+			const user = await UserSchema.findOne({
+				d: String(authorization.data.iss),
+			});
 			if (!user) return res.status(404).json({ message: "User not found" });
 
-			const bookmarks = await BookmarkSchema.find({ userdid: user.d, enabled: true });
+			const bookmarks = await BookmarkSchema.find({
+				userdid: user.d,
+				enabled: true,
+			});
 
 			if (bookmarks.length === 0) {
-				return res.json(
-					{
-						cursor: `${Date.now()}_${randomString(5, false)}`,
-						feed: [{ post: "at://did:plc:xy3lxva6bqrph3avrvhzck7q/app.bsky.feed.post/3l45rnoev4q2d" }] //No bookmarks post: https://bsky.app/profile/nemtudo.me/post/3l45rnoev4q2d
-					}
-				)
+				return res.json({
+					cursor: `${Date.now()}_${randomString(5, false)}`,
+					feed: [
+						{
+							post: "at://did:plc:xy3lxva6bqrph3avrvhzck7q/app.bsky.feed.post/3l45rnoev4q2d",
+						},
+					], //No bookmarks post: https://bsky.app/profile/nemtudo.me/post/3l45rnoev4q2d
+				});
 			}
 
-
-			return res.json(
-				{
-					cursor: `${Date.now()}_${randomString(5, false)}`,
-					feed: bookmarks.map(bookmark => { return { post: bookmark.postaturi } }).reverse()
-				}
-			)
+			return res.json({
+				cursor: `${Date.now()}_${randomString(5, false)}`,
+				feed: bookmarks
+					.map((bookmark) => {
+						return { post: bookmark.postaturi };
+					})
+					.reverse(),
+			});
 		}
 
 		return res.status(404).json({ message: "Feed not found" });
 	} catch (e) {
-		res.status(500).json({ message: "Internal Server Error" })
+		res.status(500).json({ message: "Internal Server Error" });
 	}
-
-})
+});
 
 app.get("/xrpc/app.bsky.feed.describeFeedGenerator", (req, res) => {
 	res.json({
-		"did": "did:web:betterbluesky.nemtudo.me",
-		"feeds": [
+		did: "did:web:betterbluesky.nemtudo.me",
+		feeds: [
 			{
-				"uri": "at://did:plc:xy3lxva6bqrph3avrvhzck7q/app.bsky.feed/bookmarks",
-				"title": "Itens Salvos",
-				"description": "Itens salvos da extensão BetterBluesky. Instale: https://nemtudo.me/betterbluesky",
-				"author": "nemtudo.me"
-			}
-		]
-	})
-})
+				uri: "at://did:plc:xy3lxva6bqrph3avrvhzck7q/app.bsky.feed/bookmarks",
+				title: "Itens Salvos",
+				description:
+					"Itens salvos da extensão BetterBluesky. Instale: https://nemtudo.me/betterbluesky",
+				author: "nemtudo.me",
+			},
+		],
+	});
+});
 
 app.get("/.well-known/did.json", (req, res) => {
 	return res.json({
-		"@context": [
-			"https://www.w3.org/ns/did/v1"
-		],
-		"id": "did:web:betterbluesky.nemtudo.me",
-		"service": [
+		"@context": ["https://www.w3.org/ns/did/v1"],
+		id: "did:web:betterbluesky.nemtudo.me",
+		service: [
 			{
-				"id": "#bsky_fg",
-				"type": "BskyFeedGenerator",
-				"serviceEndpoint": "https://betterbluesky.nemtudo.me"
-			}
-		]
-	})
-})
+				id: "#bsky_fg",
+				type: "BskyFeedGenerator",
+				serviceEndpoint: "https://betterbluesky.nemtudo.me",
+			},
+		],
+	});
+});
 
 // static files
 app.get("/privacy-policy", (req, res) => {
-	res.sendFile(__dirname + "/public/privacy-policy.html")
-})
-
+	res.sendFile(`${__dirname}/public/privacy-policy.html`);
+});
 
 //general
 
@@ -1053,28 +1111,37 @@ function verifyJWT(token, key) {
 		const decoded = jwt.verify(token, key, { algorithms: ["ES256K"] });
 		return {
 			error: false,
-			data: decoded
-		}
+			data: decoded,
+		};
 	} catch (err) {
 		return {
 			error: true,
-			err: err
-		}
+			err: err,
+		};
 	}
-
 }
 
 async function getTrending(hourlimit, recentlimit, languages) {
-	const hourwords = await getTrendingType(hourlimit, "w", 1.5 * 60 * 60 * 1000, languages);
+	const hourwords = await getTrendingType(
+		hourlimit,
+		"w",
+		1.5 * 60 * 60 * 1000,
+		languages,
+	);
 	const hourhashtags = await getTrendingType(
 		hourlimit,
 		"h",
 		1.5 * 60 * 60 * 1000,
-		languages
+		languages,
 	);
 
 	const recentwords = await getTrendingType(10, "w", 10 * 60 * 1000, languages);
-	const recenthashtags = await getTrendingType(10, "h", 10 * 60 * 1000, languages);
+	const recenthashtags = await getTrendingType(
+		10,
+		"h",
+		10 * 60 * 1000,
+		languages,
+	);
 
 	const _hourtrends = mergeArray(hourhashtags, hourwords);
 	const _recenttrends = mergeArray(recenthashtags, recentwords);
@@ -1125,7 +1192,7 @@ async function getTrendingType(limit, type, time, languages = []) {
 				$match: {
 					ca: { $gte: hoursAgo }, // Filtra documentos criados nos últimos x horas
 					ty: type, //apenas do tipo
-					l: (languages.length > 0) ? { $in: languages } : { $exists: true } //l inclui algum da array languages ou global
+					l: languages.length > 0 ? { $in: languages } : { $exists: true }, //l inclui algum da array languages ou global
 				},
 			},
 			{
@@ -1223,12 +1290,11 @@ function extractPostIdAndDid(uri) {
 			error: false,
 			data: {
 				did: match[1],
-				postid: match[2]
-			}
+				postid: match[2],
+			},
 		};
-	} else {
-		return {
-			error: true
-		}
 	}
+	return {
+		error: true,
+	};
 }
