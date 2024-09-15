@@ -921,6 +921,14 @@ app.get("/.well-known/did.json", (req, res) => {
 	})
 })
 
+// static files
+app.get("/privacy-policy", (req, res) => {
+	res.sendFile(__dirname + "/public/privacy-policy.html")
+})
+
+
+//general
+
 app.get("*", (req, res) => {
 	res.status(404).send({ message: "Route not found" });
 });
