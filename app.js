@@ -281,6 +281,7 @@ const cache = {
 	trending: {
 		pt: {
 			head: {
+				lang: "pt",
 				time: 0,
 				length: 0,
 			},
@@ -288,6 +289,7 @@ const cache = {
 		},
 		en: {
 			head: {
+				lang: "en",
 				time: 0,
 				length: 0,
 			},
@@ -295,6 +297,7 @@ const cache = {
 		},
 		ja: {
 			head: {
+				lang: "ja",
 				time: 0,
 				length: 0,
 			},
@@ -302,6 +305,7 @@ const cache = {
 		},
 		es: {
 			head: {
+				lang: "es",
 				time: 0,
 				length: 0,
 			},
@@ -309,6 +313,7 @@ const cache = {
 		},
 		fr: {
 			head: {
+				lang: "fr",
 				time: 0,
 				length: 0,
 			},
@@ -316,6 +321,7 @@ const cache = {
 		},
 		global: {
 			head: {
+				lang: "global",
 				time: 0,
 				length: 0,
 			},
