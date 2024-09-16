@@ -150,6 +150,9 @@ const BookmarkSchema = database.model(
 			type: Boolean,
 			default: true,
 		},
+		method: {
+			type: String,
+		},
 		createdAt: {
 			//created at
 			type: Date,
@@ -388,6 +391,7 @@ client.on("message", (message) => {
 							postid: replydata.data.postid,
 							postuserdid: replydata.data.did,
 							userdid: user.d,
+							method: "POST"
 						});
 					} catch (e) {
 						console.log("Error on message bookmark", e);
@@ -744,6 +748,7 @@ app.post("/api/bookmarks", async (req, res) => {
 			postid: postid,
 			postuserdid: postuserdid,
 			userdid: user.d,
+			method: "API"
 		});
 		return res.json(bookmark);
 	} catch (e) {
