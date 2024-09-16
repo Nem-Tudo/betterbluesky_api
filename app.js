@@ -1012,7 +1012,14 @@ app.get("/xrpc/app.bsky.feed.getFeedSkeleton", async (req, res) => {
 			"at://did:plc:xy3lxva6bqrph3avrvhzck7q/app.bsky.feed.generator/bookmarks"
 		) {
 			if (!req.headers.authorization)
-				return res.status(401).json({ message: "Unauthorized" });
+				return res.json({
+					cursor: `${Date.now()}_${randomString(5, false)}`,
+					feed: [
+						{
+							post: cache.settings.config.defaultBookmarksPost,
+						},
+					], //No bookmarks post
+				});
 
 			// const authorization = verifyJWT(req.headers.authorization.replace('Bearer ', '').trim(), process.env.FEED_KEY);
 
@@ -1024,12 +1031,26 @@ app.get("/xrpc/app.bsky.feed.getFeedSkeleton", async (req, res) => {
 			//---------------------
 
 			if (authorization.error)
-				return res.status(401).json({ message: "Unauthorized" });
+				return res.json({
+					cursor: `${Date.now()}_${randomString(5, false)}`,
+					feed: [
+						{
+							post: cache.settings.config.defaultBookmarksPost,
+						},
+					], //No bookmarks post
+				});
 
 			const user = await UserSchema.findOne({
 				d: String(authorization.data.iss),
 			});
-			if (!user) return res.status(404).json({ message: "User not found" });
+			if (!user)	return res.json({
+					cursor: `${Date.now()}_${randomString(5, false)}`,
+					feed: [
+						{
+							post: cache.settings.config.defaultBookmarksPost,
+						},
+					], //No bookmarks post
+				});
 
 			const bookmarks = await BookmarkSchema.find({
 				userdid: user.d,
