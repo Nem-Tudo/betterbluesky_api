@@ -233,17 +233,65 @@ const SettingsSchema = database.model(
 	"Setting",
 	new mongoose.Schema({
 		blacklist: {
-			trends: {
-				type: Array,
-				default: [],
+			pt: {
+				trends: {
+					type: Array,
+					default: [],
+				},
+				words: {
+					type: Array,
+					default: [],
+				},
 			},
-			words: {
-				type: Array,
-				default: [],
+			en: {
+				trends: {
+					type: Array,
+					default: [],
+				},
+				words: {
+					type: Array,
+					default: [],
+				},
 			},
-			users: {
-				type: Array,
-				default: [],
+			ja: {
+				trends: {
+					type: Array,
+					default: [],
+				},
+				words: {
+					type: Array,
+					default: [],
+				},
+			},
+			es: {
+				trends: {
+					type: Array,
+					default: [],
+				},
+				words: {
+					type: Array,
+					default: [],
+				},
+			},
+			fr: {
+				trends: {
+					type: Array,
+					default: [],
+				},
+				words: {
+					type: Array,
+					default: [],
+				},
+			},
+			global: {
+				trends: {
+					type: Array,
+					default: [],
+				},
+				words: {
+					type: Array,
+					default: [],
+				},
 			},
 		},
 		pinWord: {
@@ -339,9 +387,30 @@ const cache = {
 	},
 	settings: {
 		blacklist: {
-			trends: [],
-			words: [],
-			users: [],
+			pt: {
+				trends: [],
+				words: [],
+			},
+			en: {
+				trends: [],
+				words: [],
+			},
+			ja: {
+				trends: [],
+				words: [],
+			},
+			es: {
+				trends: [],
+				words: [],
+			},
+			fr: {
+				trends: [],
+				words: [],
+			},
+			global: {
+				trends: [],
+				words: [],
+			},
 		},
 		pinWord: {
 			enabled: false,
@@ -391,7 +460,7 @@ client.on("message", (message) => {
 							postid: replydata.data.postid,
 							postuserdid: replydata.data.did,
 							userdid: user.d,
-							method: "POST"
+							method: "POST",
 						});
 					} catch (e) {
 						console.log("Error on message bookmark", e);
@@ -413,20 +482,25 @@ client.on("message", (message) => {
 				),
 			];
 
+			let langBlacklist = cache.settings.blacklist.global;
+			if (op.payload.langs.length === 1) {
+				const lang = op.payload.langs[0].replace("en-US", "en");
+				langBlacklist =
+					cache.settings.blacklist[lang] || cache.settings.blacklist.global;
+			}
+
 			for (const hashtag of posthashtags) {
 				if (hashtag.length > 2) {
 					if (
-						cache.settings.blacklist.trends
+						langBlacklist.trends
 							.map((t) => t.toLowerCase())
-							.includes(hashtag.toLowerCase())
-					)
-						return;
-					if (
-						cache.settings.blacklist.words.find((w) =>
+							.includes(hashtag.toLowerCase()) ||
+						langBlacklist.words.find((w) =>
 							hashtag.toLowerCase().includes(w.toLowerCase()),
 						)
-					)
-						return;
+					) {
+						continue;
+					}
 					await WordSchema.create({
 						t: hashtag,
 						ty: "h",
@@ -437,17 +511,15 @@ client.on("message", (message) => {
 
 			for (const word of postwords) {
 				if (
-					cache.settings.blacklist.trends
+					langBlacklist.trends
 						.map((t) => t.toLowerCase())
-						.includes(word.toLowerCase())
-				)
-					return;
-				if (
-					cache.settings.blacklist.words.find((w) =>
+						.includes(word.toLowerCase()) ||
+					langBlacklist.words.find((w) =>
 						word.toLowerCase().includes(w.toLowerCase()),
 					)
-				)
-					return;
+				) {
+					continue;
+				}
 				await WordSchema.create({
 					t: word.toLowerCase(),
 					ty: "w",
@@ -748,7 +820,7 @@ app.post("/api/bookmarks", async (req, res) => {
 			postid: postid,
 			postuserdid: postuserdid,
 			userdid: user.d,
-			method: "API"
+			method: "API",
 		});
 		return res.json(bookmark);
 	} catch (e) {
@@ -978,31 +1050,6 @@ app.put("/api/admin/trendsmessages", async (req, res) => {
 	}
 });
 
-app.put("/api/admin/blacklist", async (req, res) => {
-	const tokenstring = req.headers.authorization;
-	if (!tokenstring)
-		return res.status(401).json({ message: "Token is required" });
-
-	const token = await TokenSchema.findOne({ token: tokenstring });
-	if (!token) return res.status(401).json({ message: "Unauthorized" });
-
-	if (!token.permissions.includes("*")) {
-		if (!token.permissions.includes("blacklist.manage"))
-			return res.status(403).json({ message: "Missing permissions" });
-	}
-	const settings = await SettingsSchema.findOne({});
-
-	try {
-		const blacklist = JSON.parse(decodeURIComponent(req.query.blacklist));
-		settings.blacklist = blacklist;
-		await settings.save();
-		return res.json(settings.blacklist);
-	} catch (e) {
-		console.log(e);
-		res.status(500).json({ message: "Internal Server Error" });
-	}
-});
-
 // xrpc
 app.get("/xrpc/app.bsky.feed.getFeedSkeleton", async (req, res) => {
 	console.log("[Feed]", req.query);
@@ -1043,7 +1090,8 @@ app.get("/xrpc/app.bsky.feed.getFeedSkeleton", async (req, res) => {
 			const user = await UserSchema.findOne({
 				d: String(authorization.data.iss),
 			});
-			if (!user)	return res.json({
+			if (!user)
+				return res.json({
 					cursor: `${Date.now()}_${randomString(5, false)}`,
 					feed: [
 						{
@@ -1238,15 +1286,20 @@ async function getTrendingType(limit, type, time, languages = []) {
 		]);
 
 		return result
-			.filter(
-				(obj) =>
-					!cache.settings.blacklist.trends
+			.filter((obj) => {
+				let langBlacklist = cache.settings.blacklist.global;
+				if (languages.length === 1) {
+					langBlacklist = cache.settings.blacklist[languages[0]];
+				}
+				return (
+					!langBlacklist.trends
 						.map((t) => t.toLowerCase())
 						.includes(obj._id.toLowerCase()) &&
-					!cache.settings.blacklist.words.find((word) =>
+					!langBlacklist.words.find((word) =>
 						obj._id.toLowerCase().includes(word.toLowerCase()),
-					),
-			)
+					)
+				);
+			})
 			.map((obj) => {
 				return { text: obj._id, count: obj.count, timefilter: time };
 			})
