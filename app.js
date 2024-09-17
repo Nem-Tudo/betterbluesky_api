@@ -1232,7 +1232,7 @@ async function getTrending(hourlimit, recentlimit, languages) {
 
 	const trends = removeDuplicatedTrends([...hourtrends, ...recenttrends]);
 
-	trends.forEach((trend) => {
+	for (const trend of trends) {
 		if (
 			cache.settings.trendsMessages.find(
 				(t) => t.word.toLowerCase() === trend.text.toLowerCase(),
@@ -1242,7 +1242,7 @@ async function getTrending(hourlimit, recentlimit, languages) {
 				(t) => t.word.toLowerCase() === trend.text.toLowerCase(),
 			).message;
 		}
-	});
+	}
 
 	if (cache.settings.pinWord.enabled) {
 		trends.splice(cache.settings.pinWord.position, 0, {
