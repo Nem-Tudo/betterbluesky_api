@@ -499,11 +499,14 @@ async function updateCacheTrending() {
 	);
 	cache._firstUpdated = true;
 
-	setTimeout(async () => {
-		await updateCacheSettings();
+	setTimeout(() => {
 		updateCacheTrending();
 	}, 29 * 1000);
 }
+
+setInterval(() => {
+	updateCacheSettings();
+}, 29 * 1000);
 
 setTimeout(
 	() => {
