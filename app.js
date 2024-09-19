@@ -540,7 +540,6 @@ async function updateCacheSettings() {
 	cache.settings.trendsMessages = settings.trendsMessages;
 }
 
-updateCacheTrending();
 async function updateCacheTrending() {
 	cache.trending.pt.data = await getTrending(15, 6, ["pt"]);
 	cache.trending.pt.head.time = Date.now();
@@ -570,14 +569,11 @@ async function updateCacheTrending() {
 		`=============================== Cache atualizado (${Date.now()}) ===============================`,
 	);
 	cache._firstUpdated = true;
-
-	setTimeout(() => {
-		updateCacheTrending();
-	}, 29 * 1000);
 }
 
-setInterval(() => {
-	updateCacheSettings();
+setInterval(async () => {
+	await updateCacheSettings();
+	updateCacheTrending();
 }, 29 * 1000);
 
 setTimeout(
